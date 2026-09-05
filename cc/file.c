@@ -1,25 +1,23 @@
 #include "file.h"
-#include "utils.h"
 
-void file_read(file *f, const char *file_path) {
+void file_read(file *f, const char *file_path, void *buffer) {
   i32 fd;
-  u64 num_bytes;
 
-  linux_file_open(file_path, &fd, &num_bytes);
-  PANIC_IF(num_bytes > MAX_FILE_SIZE, "file size greater than maximum.");
+  f->data = (i8 *)buffer;
+  linux_file_open(file_path, &fd, &f->num_bytes);
 
-  f->num_bytes = num_bytes;
-  f->data = (i8 *)mem_alloc(f->num_bytes);
-
-  u64 num_bytes_read = read(fd, f->data, f->num_bytes);
-  PANIC_IF(num_bytes != num_bytes_read,
-           "Number of bytes read does not match the size of the file");
+  const u64 num_bytes_read = linux_file_read(fd, f->data, f->num_bytes);
+  PANIC_IF(f->num_bytes != num_bytes_read,
+           "%d bytes read from %s does not match the file size of %d bytes.",
+           num_bytes_read, file_path, f->num_bytes);
 
   linux_file_close(&fd);
 }
 
 void file_close(file *f) {
-  mem_dealloc(f->data, f->num_bytes);
-  f->data = NULL;
+  linux_page_dealloc(f->data, f->num_bytes);
+#ifdef CC_DEBUG
+  f->data = CC_DEBUG_PTR_VALUE;
   f->num_bytes = 0;
+#endif
 }

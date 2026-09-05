@@ -5,12 +5,10 @@
 
 typedef struct {
   i8 *data;
-  u64 num_bytes;
+  u32 num_bytes;
 } file;
 
-void file_read(file *f, const char *file_path);
+void file_read(file *f, const char *file_path, void *buffer);
 void file_close(file *f);
-
-
 
 #endif
