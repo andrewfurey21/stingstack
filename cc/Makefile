@@ -1,12 +1,23 @@
+
 SRCS := $(wildcard *.c)
-OBJS := $(SRCS:.c=.o)
-FLAGS:= -g
+OBJS := $(SRCS:%.c=build/%.o)
+DEPS := $(OBJS:.o=.d)
+CC   := gcc
+
+FLAGS := -g -MMD -MP
 
 acc: $(OBJS)
-	$(CC) $(OBJS) $(FLAGS) -o $@
+	$(CC) $(OBJS) -o $@
 
-%.o: %.c
-	$(CC) -c $< -o $@
+build:
+	mkdir -p build
+
+build/%.o: %.c | build
+	$(CC) $(FLAGS) -c $< -o $@
+
+-include $(DEPS)
 
 clean:
-	rm acc *.o -f
+	rm -f acc
+	rm -rf build
+
