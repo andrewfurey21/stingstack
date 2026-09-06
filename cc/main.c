@@ -2,18 +2,18 @@
 #include "utils.h"
 #include "alloc.h"
 #include "file.h"
+#include "lexer.h"
 
 int main(int argc, char **argv) {
   GlobalArena global_arena;
 
   file f;
-  file_read(&f, "utils.c", global_arena.buffer);
+  file_copy_into_memory(&f, "examples/examples.c", &global_arena);
 
-  printf("Size: %u\n", f.num_bytes);
-  for (u64 i = 0; i < f.num_bytes; i++) {
-    printf("%c", f.data[i]);
-  }
+  Tokens tokens;
+  tokenize(&f, &tokens, &global_arena);
 
-  file_close(&f);
+  const u32 num_token_errors = tokens_display_errors(&tokens);
+
   return 0;
 }

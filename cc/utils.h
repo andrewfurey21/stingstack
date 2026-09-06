@@ -13,18 +13,28 @@ typedef unsigned int u32;
 #define false 0
 
 // Compiler configs
+#define CC_DEBUG
 #define CC_GLOBAL_ARENA_SIZE 1024 * 1024
 #define CC_MAX_FILE_NUM_BYTES 128 * 1024
-#define CC_DEBUG
 #define CC_DEBUG_BYTE_VALUE 'a'
 #define CC_DEBUG_PTR_VALUE NULL
 #define CC_MAX_TOKEN_LENGTH 255
+#define CC_MAX_NUM_TOKENS 2
+#define CC_NEW_LINE_CHAR '\n'
+#define CC_END_OF_FILE_CHAR -1
+#define CC_COLUMN_LIMIT 255
+#define CC_LINE_LIMIT 255
+
+// Math related defies
+#define CC_MAX_U32_VALUE 0xffffffff
 
 // C related.
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdarg.h>
 #include <alloca.h>
+#include <string.h>
+#include <stdalign.h>
 
 // Linux related.
 #include <sys/mman.h>
@@ -33,17 +43,26 @@ typedef unsigned int u32;
 #include <unistd.h>
 
 // Helper functions
-void panic_if(b8 expr,
-              const char *file,
-              const char *func,
-              u32 line,
-              const char *fmt, ...);
+void panic_or_note_if(const b8 expr,
+                      const b8 crash_program,
+                      const char *file,
+                      const char *func,
+                      const u32 line,
+                      const char *fmt, ...);
 
 #define PANIC_IF(expr, fmt, ...) \
-  panic_if(expr, __FILE__, __func__, __LINE__, fmt, ##__VA_ARGS__, NULL)
+  panic_or_note_if(expr, true, __FILE__, __func__, __LINE__, fmt, ##__VA_ARGS__, NULL)
+
+#define NOTE_IF(expr, fmt, ...) \
+  panic_or_note_if(expr, false, __FILE__, __func__, __LINE__, fmt, ##__VA_ARGS__, NULL)
 
 #define PANIC(fmt, ...) \
-  panic_if(true, __FILE__, __func__, __LINE__, fmt, ##__VA_ARGS__, NULL)
+  panic_or_note_if(true, true, __FILE__, __func__, __LINE__, fmt, ##__VA_ARGS__, NULL)
+
+#define NOTE(fmt, ...) \
+  panic_or_note_if(true, false, __FILE__, __func__, __LINE__, fmt, ##__VA_ARGS__, NULL)
+
+b8 is_new_line(i8 byte);
 
 // Linux file read helpers
 void linux_file_open(const char *file_path,

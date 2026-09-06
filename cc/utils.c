@@ -1,21 +1,28 @@
 #include "utils.h"
 
-void panic_if(const b8 expr,
-              const char *file,
-              const char *func,
-              const u32 line,
-              const char *fmt, ...) {
+void panic_or_note_if(const b8 expr,
+                         const b8 crash_program,
+                         const char *file,
+                         const char *func,
+                         const u32 line,
+                         const char *fmt, ...) {
 #ifdef CC_DEBUG
   va_list args;
   va_start(args, fmt);
   if (expr) {
-    printf("Error in %s:%s() at line %u: ", file, func, line);
+    if (crash_program) { printf("Error "); }
+    else { printf("Compiler note "); }
+    printf("in %s:%s() at line %u: ", file, func, line);
     vprintf(fmt, args);
     printf("\n");
-    exit(-1);
+    if (crash_program) exit(-1);
   }
   va_end(args);
 #endif
+}
+
+b8 is_new_line(i8 byte) {
+  return byte == CC_NEW_LINE_CHAR;
 }
 
 void *linux_page_alloc(u32 num_bytes) {
