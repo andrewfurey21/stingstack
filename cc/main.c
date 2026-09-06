@@ -5,15 +5,31 @@
 #include "lexer.h"
 
 int main(int argc, char **argv) {
+
+  const char *compilation_unit_paths[] = {
+    "examples/empty.c",
+    "examples/whitespace_and_comments.c",
+    "examples/whitespace_and_comments2.c",
+    "examples/whitespace_and_comments3.c",
+  };
+
   GlobalArena global_arena;
 
-  file f;
-  file_copy_into_memory(&f, "examples/examples.c", &global_arena);
+  for (u32 i = 0; i < STATIC_ARRAY_LENGTH(compilation_unit_paths); i++) {
+    NOTE("Compiling %s...", compilation_unit_paths[i]);
+    global_arena_clear(&global_arena);
 
-  Tokens tokens;
-  tokenize(&f, &tokens, &global_arena);
+    file f;
+    file_copy_into_memory(&f,
+                          compilation_unit_paths[i],
+                          &global_arena);
 
-  const u32 num_token_errors = tokens_display_errors(&tokens);
+    Tokens tokens;
+    tokenize(&tokens, &f, &global_arena);
 
+    const u32 num_token_errors = tokens_display_errors(&tokens);
+
+    printf("-------------------------------------\n");
+  }
   return 0;
 }

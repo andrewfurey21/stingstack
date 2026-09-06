@@ -37,10 +37,10 @@ void file_close(file *f) {
 }
 
 b8 file_at_end(file *f, u32 byte_index) {
+  // should never be >. There's a bug if it is.
   PANIC_IF(byte_index > f->num_bytes,
            "Index is overflowing. Index at %d while file %s is of length %d.", byte_index, f->path, f->num_bytes);
   return byte_index == f->num_bytes;
-  // should never be >. There's a bug if it is.
 }
 void file_location_add_new_lines(file_location *location, u32 num_new_lines) {
   PANIC_IF(location->line >= CC_LINE_LIMIT - num_new_lines, "Line limit reached.");
@@ -48,7 +48,7 @@ void file_location_add_new_lines(file_location *location, u32 num_new_lines) {
 }
 
 void file_location_add_new_line(file_location *location) {
-  location->column = 0;
+  location->column = 1;
   file_location_add_new_lines(location, 1);
 }
 
@@ -69,8 +69,6 @@ void file_location_next(file_location *location, i8 current_byte) {
 void file_location_move_until(file *f, file_location *location, u32 start_index, u32 num_bytes) {
   for (u32 current_index = 0; current_index < num_bytes; current_index++) {
     file_location_next(location, file_read_byte(f, start_index + current_index));
-
-
   }
 }
 

@@ -3,12 +3,13 @@
 #include "file.h"
 #include "utils.h"
 
-void tokens_setup(Tokens *tokens, void *buffer) {
+void tokens_setup(Tokens *tokens, file *f, void *buffer) {
   tokens->tokens = buffer;
+  tokens->f = f;
   tokens->num_tokens = 0;
 }
 
-void token_build(Tokens *tokens, file *f, file_location *location,
+void token_build(Tokens *tokens, file_location *location,
                  TokenType type, u32 file_index, u32 length,
                  const char *error_msg) {
 
@@ -18,7 +19,6 @@ void token_build(Tokens *tokens, file *f, file_location *location,
   tokens->tokens[tokens->num_tokens].type = type;
   tokens->tokens[tokens->num_tokens].length = length;
   tokens->tokens[tokens->num_tokens].file_index = file_index;
-  tokens->tokens[tokens->num_tokens].f = f;
 
   tokens->tokens[tokens->num_tokens].location.column = location->column;
   tokens->tokens[tokens->num_tokens].location.line = location->line;
@@ -35,45 +35,45 @@ void token_build(Tokens *tokens, file *f, file_location *location,
 
 }
 
-void tokenize(file *f, Tokens *tokens, GlobalArena *arena) {
-  tokens->num_tokens = 0;
-  tokens->tokens =
+void tokenize(Tokens *tokens, file *f, GlobalArena *arena) {
+  void *tokens_buffer =
     global_arena_aligned_alloc(arena,
                                sizeof(Token) * CC_MAX_NUM_TOKENS,
                                alignof(Token));
+  tokens_setup(tokens, f, tokens_buffer);
 
   u64 byte_index = 0;
   file_location location = { .line = 1, .column = 0 };
-  for (u32 token_num_bytes = 0; byte_index < f->num_bytes;
+  for (u32 token_num_bytes = 0; byte_index < tokens->f->num_bytes;
        byte_index += token_num_bytes) {
 
     token_num_bytes = 0;
-    const i8 byte = file_read_byte(f, byte_index);
+    const i8 byte = file_read_byte(tokens->f, byte_index);
 
     if (is_whitespace(byte)) {
-      token_num_bytes = skip_whitespace(f, &location, byte_index);
+      token_num_bytes = skip_whitespace(tokens->f, &location, byte_index);
       continue;
     }
 
     if (is_start_of_comment(byte)) {
-      token_num_bytes = skip_if_comment(f, &location, tokens, byte_index);
-      if (token_num_bytes > 0) continue; // TODO: make sure this is true: Might not have been a comment.
-      // Might need to be goto. want to inc + create token.
+      token_num_bytes = skip_if_comment(tokens->f, &location, tokens, byte_index);
+      if (token_num_bytes > 0) continue;
     }
-
-    // TODO: unknown/unimplemented token error.
 
     // if (is_number_related(byte)) {
     //   byte_index_offset = tokenize_number(f, tokens, byte_index);
     //   if (byte_index_offset > 0) continue;
     // }
+
+    token_build(tokens, &location, TOKEN_ERROR, byte_index, 1, "Unknown token.");
+    token_num_bytes = 1;
   }
 
-  PANIC_IF(byte_index != f->num_bytes,
+  PANIC_IF(byte_index != tokens->f->num_bytes,
            "Did not correctly finish reading. Length of %s is %d but read until %d.",
-           f->path, f->num_bytes, byte_index);
+           tokens->f->path, tokens->f->num_bytes, byte_index);
 
-  token_build(tokens, f, &location, TOKEN_EOF, 0, byte_index, NULL);
+  token_build(tokens, &location, TOKEN_EOF, 0, byte_index, NULL);
 
   NOTE("End location line: %d, column: %d.",
        location.line, location.column);
@@ -104,20 +104,18 @@ b8 is_floating_point_suffix(i8 byte) {
 // Each token generation function has to return the number of bytes it consumed
 
 u32 skip_whitespace(file *f, file_location *location, u32 start_of_whitespace) {
-  // TODO: could do with a rewrite, bunch of duplicated code
+  u32 whitespace_in_bytes = 0;
   i8 whitespace = file_read_byte(f, start_of_whitespace);
+
   PANIC_IF(!is_whitespace(whitespace),
            "Cannot skip byte 0x%x since it is not whitespace.", whitespace, whitespace);
 
-  u32 whitespace_in_bytes = 0;
   while (is_whitespace(whitespace)) {
     if (is_new_line(whitespace)) file_location_add_new_line(location);
     whitespace_in_bytes++;
-    whitespace =
-      file_read_byte_or_eof(f, start_of_whitespace + whitespace_in_bytes);
+    whitespace = file_read_byte_or_eof(f, start_of_whitespace + whitespace_in_bytes);
   }
 
-  if (is_new_line(whitespace)) file_location_add_new_line(location);
   return whitespace_in_bytes;
 }
 
@@ -128,7 +126,6 @@ u32 skip_if_comment(file *f, file_location *location, Tokens *tokens, u32 possib
   if (byte_after_start_of_comment == CC_END_OF_FILE_CHAR) {
     // Token error, early eof.
     token_build(tokens,
-                f,
                 location,
                 TOKEN_ERROR,
                 possible_start_of_comment,
@@ -136,7 +133,7 @@ u32 skip_if_comment(file *f, file_location *location, Tokens *tokens, u32 possib
                 "Erroneous end of file at '/'.");
   }
 
-  u32 num_bytes_to_skip_from_start_of_comment = 0;
+  u32 num_bytes_to_skip_from_start_of_comment;
  // Single line comment
   if (byte_after_start_of_comment == '/') {
     num_bytes_to_skip_from_start_of_comment =
@@ -166,7 +163,6 @@ u32 skip_if_comment(file *f, file_location *location, Tokens *tokens, u32 possib
 
     if (file_at_end(f, end_of_comment_or_eof)) {
       token_build(tokens,
-                  f,
                   location,
                   TOKEN_ERROR,
                   possible_start_of_comment,
@@ -177,6 +173,9 @@ u32 skip_if_comment(file *f, file_location *location, Tokens *tokens, u32 possib
                              location,
                              possible_start_of_comment,
                              num_bytes_to_skip_from_start_of_comment);
+  } else {
+    // Not a comment.
+    num_bytes_to_skip_from_start_of_comment = 0;
   }
 
   return num_bytes_to_skip_from_start_of_comment;
@@ -234,12 +233,10 @@ u32 num_bytes_until_end_of_matching_string_or_eof(file *f,
   u32 substring_index = start_index;
 
   b8 substring_match = false;
-  // while (!substring_match && !file_at_end(f, substring_index + string_len)) {
-  while (!substring_match && !file_at_end(f, substring_index)) {
+  while (!substring_match && !file_at_end(f, substring_index + string_len - 1)) {
     substring_match = true;
 
     for (u32 string_index = 0; string_index < string_len; string_index++) {
-      // TODO: check for end of file too.
       const i8 current_file_byte =
         file_read_byte(f, substring_index + string_index);
       const i8 current_substring_byte = substring[string_index];
@@ -252,20 +249,20 @@ u32 num_bytes_until_end_of_matching_string_or_eof(file *f,
     if (!substring_match) substring_index++;
   }
 
-  NOTE_IF(!(file_at_end(f, substring_index) || substring_match),
+  NOTE_IF(!(file_at_end(f, substring_index + string_len - 1) || substring_match),
           "Should either be at the end of the file, or found a substring match.");
 
-  if (file_at_end(f, substring_index)) {
-    return substring_index - start_index;
+  if (file_at_end(f, substring_index + string_len - 1)) {
+    return (substring_index + string_len - 1) - start_index;
   } else {
     return substring_index - start_index + string_len;
   }
 }
 
-u32 tokenize_number(file *f, file_location *location, Tokens *tokens, u32 start_of_token_index) {
+u32 tokenize_number(file_location *location, Tokens *tokens, u32 start_of_token_index) {
   // TODO: add floating point hexadecimal support
   Token *current_token = &tokens->tokens[tokens->num_tokens - 1];
-  i8 current_byte = file_read_byte(f, start_of_token_index);
+  i8 current_byte = file_read_byte(tokens->f, start_of_token_index);
   b8 found_point_already = false;
 
   TokenType type = TOKEN_INT_LITERAL;
@@ -273,15 +270,15 @@ u32 tokenize_number(file *f, file_location *location, Tokens *tokens, u32 start_
   // Can't be floats: 0b/0x/0o, so for 0x, don't check float prefix.
   if (current_byte == '.') {
     found_point_already = true;
-    if (!is_number(peek_next_byte(f, start_of_token_index))) {
+    if (!is_number(peek_next_byte(tokens->f, start_of_token_index))) {
       return 0;
     }
   }
 
   // keep going until second dot or not numeric.
   u32 end_of_token_index = start_of_token_index;
-  while (is_number_related(peek_next_byte(f, end_of_token_index))) {
-    current_byte = peek_next_byte(f, end_of_token_index);
+  while (is_number_related(peek_next_byte(tokens->f, end_of_token_index))) {
+    current_byte = peek_next_byte(tokens->f, end_of_token_index);
     end_of_token_index++;
 
     if (current_byte == '.') {
@@ -300,7 +297,7 @@ u32 tokenize_number(file *f, file_location *location, Tokens *tokens, u32 start_
   NOTE_IF(token_length == 0,
           "Length of number token should not be zero.");
 
-  token_build(tokens, f, location, type, start_of_token_index, token_length, NULL);
+  token_build(tokens, location, type, start_of_token_index, token_length, NULL);
   return token_length;
 }
 

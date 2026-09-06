@@ -121,12 +121,12 @@ typedef struct {
   u32 length;
   u32 file_index;
   const char *error_msg;
-  file *f; // TODO: f should be local to Tokens, but keep pointer?. global f could change.
   file_location location;
 } Token;
 
 typedef struct {
   Token *tokens;
+  file *f;
   u32 num_tokens;
 } Tokens;
 
@@ -147,12 +147,12 @@ b8 match_next_bytes(file *f, u32 start_of_token_in_file, const char *match);
 b8 match_next_byte(file *f, u32 start_of_token_in_file, char match);
 i8 peek_next_byte(file *f, u32 start_of_token_in_file);
 
-void token_build(Tokens *tokens, file *f, file_location *location,
+void token_build(Tokens *tokens, file_location *location,
                  TokenType type, u32 file_index, u32 length,
                  const char *error_msg);
-void tokens_setup(Tokens *tokens, void *buffer);
-void tokenize(file *f, Tokens *tokens, GlobalArena *arena);
-u32 tokenize_number(file *f, file_location *location, Tokens *tokens, u32 start_of_token_index);
+void tokens_setup(Tokens *tokens, file *f, void *buffer);
+void tokenize(Tokens *tokens, file *f, GlobalArena *arena);
+u32 tokenize_number(file_location *location, Tokens *tokens, u32 start_of_token_index);
 u32 tokens_display_errors(Tokens *tokens);
 b8 token_display_error(Tokens *tokens, u32 token_index);
 

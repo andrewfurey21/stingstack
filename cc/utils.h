@@ -19,7 +19,7 @@ typedef unsigned int u32;
 #define CC_DEBUG_BYTE_VALUE 'a'
 #define CC_DEBUG_PTR_VALUE NULL
 #define CC_MAX_TOKEN_LENGTH 255
-#define CC_MAX_NUM_TOKENS 2
+#define CC_MAX_NUM_TOKENS 10
 #define CC_NEW_LINE_CHAR '\n'
 #define CC_END_OF_FILE_CHAR -1
 #define CC_COLUMN_LIMIT 255
@@ -63,6 +63,8 @@ void panic_or_note_if(const b8 expr,
   panic_or_note_if(true, false, __FILE__, __func__, __LINE__, fmt, ##__VA_ARGS__, NULL)
 
 b8 is_new_line(i8 byte);
+
+#define STATIC_ARRAY_LENGTH(arr) ((sizeof(arr) / sizeof(arr[0])))
 
 // Linux file read helpers
 void linux_file_open(const char *file_path,
