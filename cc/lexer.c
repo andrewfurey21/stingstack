@@ -56,14 +56,14 @@ void tokenize(Tokens *tokens, file *f, GlobalArena *arena) {
     }
 
     if (is_start_of_comment(byte)) {
-      token_num_bytes = skip_if_comment(tokens->f, &location, tokens, byte_index);
+      token_num_bytes = skip_if_comment(tokens, &location, byte_index);
       if (token_num_bytes > 0) continue;
     }
 
-    // if (is_number_related(byte)) {
-    //   byte_index_offset = tokenize_number(f, tokens, byte_index);
-    //   if (byte_index_offset > 0) continue;
-    // }
+    if (is_number_related(byte)) {
+      token_num_bytes = tokenize_number(tokens, &location, byte_index);
+      if (token_num_bytes > 0) continue;
+    }
 
     token_build(tokens, &location, TOKEN_ERROR, byte_index, 1, "Unknown token.");
     token_num_bytes = 1;
@@ -119,9 +119,9 @@ u32 skip_whitespace(file *f, file_location *location, u32 start_of_whitespace) {
   return whitespace_in_bytes;
 }
 
-u32 skip_if_comment(file *f, file_location *location, Tokens *tokens, u32 possible_start_of_comment) {
+u32 skip_if_comment(Tokens *tokens, file_location *location, u32 possible_start_of_comment) {
   const i8 byte_after_start_of_comment =
-    file_read_byte_or_eof(f, possible_start_of_comment + 1);
+    file_read_byte_or_eof(tokens->f, possible_start_of_comment + 1);
 
   if (byte_after_start_of_comment == CC_END_OF_FILE_CHAR) {
     // Token error, early eof.
@@ -137,12 +137,12 @@ u32 skip_if_comment(file *f, file_location *location, Tokens *tokens, u32 possib
  // Single line comment
   if (byte_after_start_of_comment == '/') {
     num_bytes_to_skip_from_start_of_comment =
-      num_bytes_until_matching_byte_or_eof(f,
+      num_bytes_until_matching_byte_or_eof(tokens->f,
                                            possible_start_of_comment,
                                            CC_NEW_LINE_CHAR);
     const u32 end_of_comment_or_eof =
       possible_start_of_comment + num_bytes_to_skip_from_start_of_comment;
-    if (!file_at_end(f, end_of_comment_or_eof)) {
+    if (!file_at_end(tokens->f, end_of_comment_or_eof)) {
       file_location_add_new_line(location);
       num_bytes_to_skip_from_start_of_comment++;
     } else {
@@ -154,14 +154,14 @@ u32 skip_if_comment(file *f, file_location *location, Tokens *tokens, u32 possib
   // Should return error token if no ending '*/'.
   else if (byte_after_start_of_comment == '*') {
     num_bytes_to_skip_from_start_of_comment =
-      num_bytes_until_end_of_matching_string_or_eof(f,
+      num_bytes_until_end_of_matching_string_or_eof(tokens->f,
                                              possible_start_of_comment + 2,
                                              "*/") + 2;
 
     const u32 end_of_comment_or_eof =
       possible_start_of_comment + num_bytes_to_skip_from_start_of_comment;
 
-    if (file_at_end(f, end_of_comment_or_eof)) {
+    if (file_at_end(tokens->f, end_of_comment_or_eof)) {
       token_build(tokens,
                   location,
                   TOKEN_ERROR,
@@ -169,7 +169,7 @@ u32 skip_if_comment(file *f, file_location *location, Tokens *tokens, u32 possib
                   num_bytes_to_skip_from_start_of_comment,
                   "Multi-line comment should end with */, found end of file.");
     }
-    file_location_move_until(f,
+    file_location_move_until(tokens->f,
                              location,
                              possible_start_of_comment,
                              num_bytes_to_skip_from_start_of_comment);
@@ -259,7 +259,8 @@ u32 num_bytes_until_end_of_matching_string_or_eof(file *f,
   }
 }
 
-u32 tokenize_number(file_location *location, Tokens *tokens, u32 start_of_token_index) {
+u32 tokenize_number(Tokens *tokens, file_location *location, u32 start_of_token_index) {
+  return 0;
   // TODO: add floating point hexadecimal support
   Token *current_token = &tokens->tokens[tokens->num_tokens - 1];
   i8 current_byte = file_read_byte(tokens->f, start_of_token_index);

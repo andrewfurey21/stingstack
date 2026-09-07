@@ -136,8 +136,6 @@ b8 is_number(i8 byte);
 b8 is_number_related(i8 byte);
 b8 is_floating_point_suffix(i8 byte);
 
-u32 skip_whitespace(file *f, file_location *location, u32 start_of_whitespace);
-u32 skip_if_comment(file *f, file_location *location, Tokens *tokens, u32 possible_start_of_comment);
 
 u32 num_bytes_until_matching_byte_or_eof(file *f, u32 start_index, i8 match);
 u32 num_bytes_until_end_of_matching_string_or_eof(file *f,u32 start_index, const char *substring);
@@ -150,9 +148,14 @@ i8 peek_next_byte(file *f, u32 start_of_token_in_file);
 void token_build(Tokens *tokens, file_location *location,
                  TokenType type, u32 file_index, u32 length,
                  const char *error_msg);
-void tokens_setup(Tokens *tokens, file *f, void *buffer);
 void tokenize(Tokens *tokens, file *f, GlobalArena *arena);
-u32 tokenize_number(file_location *location, Tokens *tokens, u32 start_of_token_index);
+void tokens_setup(Tokens *tokens, file *f, void *buffer);
+
+// Token generation
+u32 skip_whitespace(file *f, file_location *location, u32 start_of_whitespace);
+u32 skip_if_comment(Tokens *tokens, file_location *location, u32 possible_start_of_comment);
+u32 tokenize_number(Tokens *tokens, file_location *location, u32 start_of_token_index);
+
 u32 tokens_display_errors(Tokens *tokens);
 b8 token_display_error(Tokens *tokens, u32 token_index);
 
