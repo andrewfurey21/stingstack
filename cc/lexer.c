@@ -7,9 +7,11 @@ void tokens_setup(Tokens *tokens, file *f, void *buffer) {
   tokens->tokens = buffer;
   tokens->f = f;
   tokens->num_tokens = 0;
+  tokens->location.line = 1;
+  tokens->location.column = 0;
 }
 
-void token_build(Tokens *tokens, file_location *location,
+void token_build(Tokens *tokens,
                  TokenType type, u32 file_index, u32 length,
                  const char *error_msg) {
 
@@ -20,8 +22,10 @@ void token_build(Tokens *tokens, file_location *location,
   tokens->tokens[tokens->num_tokens].length = length;
   tokens->tokens[tokens->num_tokens].file_index = file_index;
 
-  tokens->tokens[tokens->num_tokens].location.column = location->column;
-  tokens->tokens[tokens->num_tokens].location.line = location->line;
+  tokens->tokens[tokens->num_tokens].location.column =
+    tokens->location.column;
+  tokens->tokens[tokens->num_tokens].location.line =
+    tokens->location.line;
 
   PANIC_IF(type != TOKEN_ERROR && error_msg != NULL,
            "Error message should be null for non-error token (%d), but contains %s.", type, error_msg);
@@ -43,7 +47,6 @@ void tokenize(Tokens *tokens, file *f, GlobalArena *arena) {
   tokens_setup(tokens, f, tokens_buffer);
 
   u64 byte_index = 0;
-  file_location location = { .line = 1, .column = 0 };
   for (u32 token_num_bytes = 0; byte_index < tokens->f->num_bytes;
        byte_index += token_num_bytes) {
 
@@ -51,21 +54,22 @@ void tokenize(Tokens *tokens, file *f, GlobalArena *arena) {
     const i8 byte = file_read_byte(tokens->f, byte_index);
 
     if (is_whitespace(byte)) {
-      token_num_bytes = skip_whitespace(tokens->f, &location, byte_index);
+      token_num_bytes =
+        skip_whitespace(tokens->f, &tokens->location, byte_index);
       continue;
     }
 
     if (is_start_of_comment(byte)) {
-      token_num_bytes = skip_if_comment(tokens, &location, byte_index);
+      token_num_bytes = skip_if_comment(tokens, byte_index);
       if (token_num_bytes > 0) continue;
     }
 
     if (is_number_related(byte)) {
-      token_num_bytes = tokenize_number(tokens, &location, byte_index);
+      token_num_bytes = tokenize_number(tokens, byte_index);
       if (token_num_bytes > 0) continue;
     }
 
-    token_build(tokens, &location, TOKEN_ERROR, byte_index, 1, "Unknown token.");
+    token_build(tokens, TOKEN_ERROR, byte_index, 1, "Unknown token.");
     token_num_bytes = 1;
   }
 
@@ -73,10 +77,10 @@ void tokenize(Tokens *tokens, file *f, GlobalArena *arena) {
            "Did not correctly finish reading. Length of %s is %d but read until %d.",
            tokens->f->path, tokens->f->num_bytes, byte_index);
 
-  token_build(tokens, &location, TOKEN_EOF, 0, byte_index, NULL);
+  token_build(tokens, TOKEN_EOF, 0, byte_index, NULL);
 
   NOTE("End location line: %d, column: %d.",
-       location.line, location.column);
+       tokens->location.line, tokens->location.column);
 }
 
 
@@ -119,14 +123,13 @@ u32 skip_whitespace(file *f, file_location *location, u32 start_of_whitespace) {
   return whitespace_in_bytes;
 }
 
-u32 skip_if_comment(Tokens *tokens, file_location *location, u32 possible_start_of_comment) {
+u32 skip_if_comment(Tokens *tokens, u32 possible_start_of_comment) {
   const i8 byte_after_start_of_comment =
     file_read_byte_or_eof(tokens->f, possible_start_of_comment + 1);
 
   if (byte_after_start_of_comment == CC_END_OF_FILE_CHAR) {
     // Token error, early eof.
     token_build(tokens,
-                location,
                 TOKEN_ERROR,
                 possible_start_of_comment,
                 1,
@@ -143,7 +146,7 @@ u32 skip_if_comment(Tokens *tokens, file_location *location, u32 possible_start_
     const u32 end_of_comment_or_eof =
       possible_start_of_comment + num_bytes_to_skip_from_start_of_comment;
     if (!file_at_end(tokens->f, end_of_comment_or_eof)) {
-      file_location_add_new_line(location);
+      file_location_add_new_line(&tokens->location);
       num_bytes_to_skip_from_start_of_comment++;
     } else {
       NOTE("Comment ended with eof.");
@@ -163,14 +166,13 @@ u32 skip_if_comment(Tokens *tokens, file_location *location, u32 possible_start_
 
     if (file_at_end(tokens->f, end_of_comment_or_eof)) {
       token_build(tokens,
-                  location,
                   TOKEN_ERROR,
                   possible_start_of_comment,
                   num_bytes_to_skip_from_start_of_comment,
                   "Multi-line comment should end with */, found end of file.");
     }
-    file_location_move_until(tokens->f,
-                             location,
+    file_location_move_until(&tokens->location,
+                             tokens->f,
                              possible_start_of_comment,
                              num_bytes_to_skip_from_start_of_comment);
   } else {
@@ -259,8 +261,7 @@ u32 num_bytes_until_end_of_matching_string_or_eof(file *f,
   }
 }
 
-u32 tokenize_number(Tokens *tokens, file_location *location, u32 start_of_token_index) {
-  return 0;
+u32 tokenize_number(Tokens *tokens, u32 start_of_token_index) {
   // TODO: add floating point hexadecimal support
   Token *current_token = &tokens->tokens[tokens->num_tokens - 1];
   i8 current_byte = file_read_byte(tokens->f, start_of_token_index);
@@ -271,6 +272,7 @@ u32 tokenize_number(Tokens *tokens, file_location *location, u32 start_of_token_
   // Can't be floats: 0b/0x/0o, so for 0x, don't check float prefix.
   if (current_byte == '.') {
     found_point_already = true;
+    type = TOKEN_FLOAT_LITERAL;
     if (!is_number(peek_next_byte(tokens->f, start_of_token_index))) {
       return 0;
     }
@@ -298,7 +300,8 @@ u32 tokenize_number(Tokens *tokens, file_location *location, u32 start_of_token_
   NOTE_IF(token_length == 0,
           "Length of number token should not be zero.");
 
-  token_build(tokens, location, type, start_of_token_index, token_length, NULL);
+  // Could be an error token.
+  token_build(tokens, type, start_of_token_index, token_length, NULL);
   return token_length;
 }
 

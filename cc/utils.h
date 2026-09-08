@@ -14,8 +14,8 @@ typedef unsigned int u32;
 
 // Compiler configs
 #define CC_DEBUG
-#define CC_GLOBAL_ARENA_SIZE 1024 * 1024
-#define CC_MAX_FILE_NUM_BYTES 128 * 1024
+#define CC_GLOBAL_ARENA_SIZE 1024 * 4
+#define CC_MAX_FILE_NUM_BYTES 512
 #define CC_DEBUG_BYTE_VALUE 'a'
 #define CC_DEBUG_PTR_VALUE NULL
 #define CC_MAX_TOKEN_LENGTH 255

@@ -66,7 +66,7 @@ void file_location_next(file_location *location, i8 current_byte) {
   }
 }
 
-void file_location_move_until(file *f, file_location *location, u32 start_index, u32 num_bytes) {
+void file_location_move_until(file_location *location, file *f, u32 start_index, u32 num_bytes) {
   for (u32 current_index = 0; current_index < num_bytes; current_index++) {
     file_location_next(location, file_read_byte(f, start_index + current_index));
   }
