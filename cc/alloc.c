@@ -18,12 +18,12 @@ void *global_arena_aligned_alloc(GlobalArena *arena,
   // trying to be branchless :)
   b8 is_aligned = (!!(arena->position & ~(alignment - 1)));
   u32 offset =  (alignment - arena->position & (alignment - 1));
-  arena->position += is_aligned * offset;
 
   PANIC_IF(arena->position + num_bytes > CC_GLOBAL_ARENA_SIZE,
-           "Could not make allocation at %d since size is %d.",
-           arena->position + num_bytes, CC_GLOBAL_ARENA_SIZE);
+           "Could not make allocation at %d with offset %d of size %d when max is %d.",
+           arena->position, is_aligned * offset, num_bytes, CC_GLOBAL_ARENA_SIZE);
 
+  arena->position += is_aligned * offset;
   void *memory = arena->buffer + arena->position;
   arena->position += num_bytes;
   return memory;

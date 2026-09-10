@@ -13,15 +13,27 @@ typedef struct {
 
 #define FILE_PANIC_IF_ERROR(f) \
   PANIC_IF(f->file_error.type == FAILED, "%s:\"%s\"", \
-          (f->path == NULL ? "text from memory" : f->path), \
+          (f->path == NULL ? "text/memory" : f->path), \
           f->file_error.message);
 
-void file_copy_into_memory(file *f, const char *file_path, GlobalArena *arena);
+void file_copy_into_memory(file *f, const char *file_path, void *buffer);
 void file_set_data_to(file *f, void *buffer, u32 num_bytes);
 i8 file_read_byte(file *f, u32 byte_index);
 i8 file_read_byte_or_eof(file *f, u32 byte_index);
 b8 file_at_end(file *f, u32 byte_index);
 void file_close(file *f);
+
+typedef struct {
+  char *data;
+  const char *path;
+  u32 capacity;
+  u32 size;
+  error file_error;
+} file_write;
+
+void file_write_setup(file_write *fw, void *buffer, const char *file_path, u32 capacity, b8 overwrite);
+void file_write_append_bytes(file_write *fw, const char *buffer, u32 num_bytes_to_write);
+void file_flush_to_disk(file_write *fw);
 
 typedef struct {
   u32 line;

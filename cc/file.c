@@ -1,16 +1,13 @@
 #include "file.h"
-#include "alloc.h"
 #include "utils.h"
 
-void file_copy_into_memory(file *f, const char *file_path, GlobalArena *arena) {
+void file_copy_into_memory(file *f, const char *file_path, void *buffer) {
   i32 fd;
-  linux_file_open(file_path, &fd, &f->num_bytes);
+  linux_file_open(file_path, &fd, &f->num_bytes, O_RDONLY);
 
-  i8 *file_buffer =
-    (i8 *)global_arena_aligned_alloc(arena, f->num_bytes, alignof(i8));
   f->path = file_path;
 
-  const u64 num_bytes_read = linux_file_read(fd, file_buffer, f->num_bytes);
+  const u64 num_bytes_read = linux_file_read(fd, buffer, f->num_bytes);
   if (f->num_bytes != num_bytes_read) {
     f->num_bytes = 0;
     f->data = NULL;
@@ -18,12 +15,12 @@ void file_copy_into_memory(file *f, const char *file_path, GlobalArena *arena) {
     f->file_error.message =
       "Number of bytes read was not the number expected.";
   } else {
-    f->data = (const char *)file_buffer;
+    f->data = (const char *)buffer;
     f->file_error.type = SUCCESS;
     f->file_error.message = NULL;
   }
 
-  linux_file_close(&fd);
+  linux_file_close(fd);
 }
 
 void file_set_data_to(file *f, void *buffer, u32 num_bytes) {
@@ -61,6 +58,54 @@ b8 file_at_end(file *f, u32 byte_index) {
            "Index is overflowing. Index at %d while file %s is of length %d.", byte_index, f->path, f->num_bytes);
   return byte_index == f->num_bytes;
 }
+
+void file_write_setup(file_write *fw, void *buffer, const char *file_path, u32 capacity, b8 overwrite) {
+  fw->data = (char *)buffer;
+  fw->path = file_path;
+  fw->capacity = capacity;
+  fw->size = 0;
+  fw->file_error.type = UNKNOWN;
+  fw->file_error.message = NULL;
+}
+
+void file_write_append_bytes(file_write *fw, const char *buffer, u32 num_bytes_to_write) {
+  if (fw->size + num_bytes_to_write > fw->capacity) {
+    fw->file_error.type = FAILED;
+    fw->file_error.message = "OOM while writing. Could not finish writing to file.";
+    return;
+  }
+
+  const u32 offset = fw->size;
+  for (u32 i = 0; i < num_bytes_to_write; i++) {
+    fw->data[i + offset] = buffer[i];
+  }
+
+  fw->size += num_bytes_to_write;
+}
+
+void file_flush_to_disk(file_write *fw) {
+  FILE_PANIC_IF_ERROR(fw);
+
+  i32 file_descriptor;
+  linux_file_open(fw->path, &file_descriptor, NULL, O_RDWR | O_CREAT);
+  if (file_descriptor == -1) {
+    fw->file_error.type = FAILED;
+    fw->file_error.message = "Could not open file when writing.";
+    return;
+  }
+
+  u32 num_bytes_written = linux_file_write(file_descriptor, fw->data, fw->size);
+  linux_file_close(file_descriptor);
+
+  if (num_bytes_written != fw->size) {
+    fw->file_error.type = FAILED;
+    fw->file_error.message = "Could not finish writing when flushing."; // TODO: add func name to each error string.
+  } else {
+    fw->file_error.type = SUCCESS;
+    fw->file_error.message = NULL;
+  }
+}
+
 void file_location_add_new_lines(file_location *location, u32 num_new_lines) {
   location->line += num_new_lines;
 }

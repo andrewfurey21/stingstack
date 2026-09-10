@@ -67,7 +67,7 @@ b8 is_new_line(i8 byte);
 #define STATIC_ARRAY_LENGTH(arr) ((sizeof(arr) / sizeof(arr[0])))
 
 typedef enum {
-  SUCCESS, FAILED
+  SUCCESS, FAILED, UNKNOWN,
 } error_type;
 
 typedef struct {
@@ -76,14 +76,19 @@ typedef struct {
 } error;
 
 // Linux file read helpers
+
+// TODO: probably clean up how writeable params are ordered here.
 void linux_file_open(const char *file_path,
                      i32 *file_descriptor,
-                     u32 *num_bytes);
+                     u32 *num_bytes,
+                     u32 flags);
 
 u32 linux_file_read(i32 file_descriptor,
-                    char *data, u32 num_bytes);
+                    void *data, u32 num_bytes);
 
-void linux_file_close(i32 *file_descriptor);
+u32 linux_file_write(i32 file_descriptor, void *data, u32 num_bytes);
+
+void linux_file_close(i32 file_descriptor);
 
 // Linux page alloc helpers
 void *linux_page_alloc(u32 num_bytes);

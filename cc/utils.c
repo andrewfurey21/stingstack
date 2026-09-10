@@ -46,16 +46,20 @@ void linux_page_dealloc(void *mem, u32 num_bytes) {
 
 void linux_file_open(const char *file_path,
                      i32 *file_descriptor,
-                     u32 *num_bytes) {
-  *file_descriptor = open(file_path, O_RDONLY);
+                     u32 *num_bytes,
+                     u32 flags) {
+  *file_descriptor = open(file_path, flags, !!(flags & O_CREAT) * 0644);
   if (*file_descriptor == -1) return;
+
+  if (num_bytes == NULL) return;
 
   struct stat st;
   if (fstat(*file_descriptor, &st) == -1) {
     close(*file_descriptor);
-    PANIC("Could not gather stats from %s.", file_path);
+    PANIC("Could not gather stats from %s.", file_path); // TODO: return error's
   }
 
+  // TODO: return errors here too instead. anywhere 'error' is used.
   PANIC_IF(st.st_size > CC_MAX_FILE_NUM_BYTES,
            "file size of %s is %d, but maximum is %d.",
            file_path, st.st_size, CC_MAX_FILE_NUM_BYTES);
@@ -63,13 +67,17 @@ void linux_file_open(const char *file_path,
   *num_bytes = st.st_size;
 }
 
-void linux_file_close(i32 *file_descriptor) {
-  close(*file_descriptor);
+void linux_file_close(i32 file_descriptor) {
+  close(file_descriptor);
 }
 
 u32 linux_file_read(i32 file_descriptor,
-                    char *data, u32 num_bytes) {
+                    void *data, u32 num_bytes) {
   return read(file_descriptor, data, num_bytes);
+}
+
+u32 linux_file_write(i32 file_descriptor, void *data, u32 num_bytes) {
+  return write(file_descriptor, data, num_bytes);
 }
 
 b8 is_power_of_two(u32 number) {
