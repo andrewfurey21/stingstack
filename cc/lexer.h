@@ -6,10 +6,13 @@
 #include "file.h"
 
 enum TokenType: u8 {
+
     TOKEN_INT_LITERAL,
     TOKEN_FLOAT_LITERAL,
+
     TOKEN_STRING_LITERAL,
     TOKEN_CHAR_LITERAL,
+
     TOKEN_IDENTIFIER,
 
     TOKEN_LEFT_PAREN,
@@ -129,6 +132,7 @@ typedef struct {
   file *f;
   file_location location; // location of cursor.
   u32 num_tokens;
+  error tokenizing_error;
 } Tokens;
 
 b8 is_whitespace(i8 byte);
@@ -138,8 +142,8 @@ b8 is_number_related(i8 byte);
 b8 is_floating_point_suffix(i8 byte);
 
 u32 num_bytes_until_matching_byte_or_eof(file *f, u32 start_index, i8 match);
+// TODO: look at boyer-moore, knuth-morrs-partt, two-way, bitap
 u32 num_bytes_until_end_of_matching_string_or_eof(file *f,u32 start_index, const char *substring);
-u32 num_matching_byte_in_substring(file *f, u32 start_index, u32 substring_length, i8 match);
 
 b8 match_next_bytes(file *f, u32 start_of_token_in_file, const char *match);
 b8 match_next_byte(file *f, u32 start_of_token_in_file, char match);
@@ -157,7 +161,7 @@ u32 skip_if_comment(Tokens *tokens, u32 possible_start_of_comment);
 u32 tokenize_number(Tokens *tokens, u32 start_of_token_index);
 
 u32 tokens_display_errors(Tokens *tokens);
-b8 token_display_error(Tokens *tokens, u32 token_index);
+u32 token_display_error(Tokens *tokens, u32 token_index);
 
 
 #endif

@@ -40,6 +40,16 @@ void token_build(Tokens *tokens,
 }
 
 void tokenize(Tokens *tokens, file *f, GlobalArena *arena) {
+
+  if (f->file_error.type == FAILED) {
+    tokens->tokenizing_error.type = FAILED;
+    tokens->tokenizing_error.message = "tokenize(): could not read from file.";
+    return;
+  } else {
+    tokens->tokenizing_error.type = SUCCESS;
+    tokens->tokenizing_error.message = NULL;
+  }
+
   void *tokens_buffer =
     global_arena_aligned_alloc(arena,
                                sizeof(Token) * CC_MAX_NUM_TOKENS,
@@ -306,6 +316,12 @@ u32 tokenize_number(Tokens *tokens, u32 start_of_token_index) {
 }
 
 u32 tokens_display_errors(Tokens *tokens) {
+  if (tokens->tokenizing_error.type == FAILED) {
+    NOTE("A problem occurred when tokenizing: %s",
+         tokens->tokenizing_error.message);
+    return 1;
+  }
+
   u32 num_token_errors = 0;
   for (u32 token_index = 0; token_index < tokens->num_tokens; token_index++) {
     num_token_errors += (u32)token_display_error(tokens, token_index);
@@ -320,12 +336,14 @@ u32 tokens_display_errors(Tokens *tokens) {
   return num_token_errors;
 }
 
-b8 token_display_error(Tokens *tokens, u32 token_index) {
+u32 token_display_error(Tokens *tokens, u32 token_index) {
   Token token = tokens->tokens[token_index];
   if (token.type == TOKEN_ERROR) {
     NOTE("Token error at line %d, column %d: %s",
          token.location.line, token.location.column, token.error_msg);
-    return true;
+    return 1;
   }
-  return false;
+
+  return 0;
 }
+

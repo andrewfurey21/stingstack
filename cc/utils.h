@@ -66,13 +66,22 @@ b8 is_new_line(i8 byte);
 
 #define STATIC_ARRAY_LENGTH(arr) ((sizeof(arr) / sizeof(arr[0])))
 
+typedef enum {
+  SUCCESS, FAILED
+} error_type;
+
+typedef struct {
+  const char *message;
+  error_type type;
+} error;
+
 // Linux file read helpers
 void linux_file_open(const char *file_path,
                      i32 *file_descriptor,
                      u32 *num_bytes);
 
 u32 linux_file_read(i32 file_descriptor,
-                    i8 *data, u32 num_bytes);
+                    char *data, u32 num_bytes);
 
 void linux_file_close(i32 *file_descriptor);
 

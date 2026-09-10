@@ -5,12 +5,19 @@
 #include "alloc.h"
 
 typedef struct {
-  i8 *data;
-  u32 num_bytes;
+  const char *data;
   const char *path;
+  u32 num_bytes;
+  error file_error;
 } file;
 
+#define FILE_PANIC_IF_ERROR(f) \
+  PANIC_IF(f->file_error.type == FAILED, "%s:\"%s\"", \
+          (f->path == NULL ? "text from memory" : f->path), \
+          f->file_error.message);
+
 void file_copy_into_memory(file *f, const char *file_path, GlobalArena *arena);
+void file_set_data_to(file *f, void *buffer, u32 num_bytes);
 i8 file_read_byte(file *f, u32 byte_index);
 i8 file_read_byte_or_eof(file *f, u32 byte_index);
 b8 file_at_end(file *f, u32 byte_index);

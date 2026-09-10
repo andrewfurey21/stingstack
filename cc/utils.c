@@ -48,7 +48,7 @@ void linux_file_open(const char *file_path,
                      i32 *file_descriptor,
                      u32 *num_bytes) {
   *file_descriptor = open(file_path, O_RDONLY);
-  PANIC_IF(*file_descriptor == -1, "Could not read from file %s.", file_path);
+  if (*file_descriptor == -1) return;
 
   struct stat st;
   if (fstat(*file_descriptor, &st) == -1) {
@@ -68,7 +68,7 @@ void linux_file_close(i32 *file_descriptor) {
 }
 
 u32 linux_file_read(i32 file_descriptor,
-                    i8 *data, u32 num_bytes) {
+                    char *data, u32 num_bytes) {
   return read(file_descriptor, data, num_bytes);
 }
 
