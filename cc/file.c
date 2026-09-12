@@ -23,7 +23,7 @@ void file_read_into_memory(file_read *f) {
   os_file_open(f->path, O_RDONLY, &file_descriptor, &f->num_bytes, &e);
 
   if (e.type == FAILED) {
-    error_copy(&f->file_error, &e);
+    f->file_error = e;
     os_file_close(file_descriptor);
     return;
   }
@@ -31,7 +31,7 @@ void file_read_into_memory(file_read *f) {
   os_file_read(file_descriptor, f->data, f->num_bytes, &e);
 
   if (e.type == FAILED) {
-    error_set(&f->file_error, "Could not finish reading.", FAILED);
+    f->file_error = e;
   }
 
   os_file_close(file_descriptor);
@@ -113,16 +113,15 @@ void file_write_to_disk(file_write *fw) {
 
   os_file_open(fw->path, O_RDWR | O_CREAT, &file_descriptor, NULL, &e);
   if (e.type == FAILED) {
-    error_copy(&fw->file_error, &e);
+    fw->file_error = e;
     return;
   }
 
   os_file_write(file_descriptor, fw->data, fw->size, &e);
   os_file_close(file_descriptor);
 
-  // TODO: maybe, copy if failed? add macro for returns?
   if (e.type == FAILED) {
-    error_copy(&fw->file_error, &e);
+    fw->file_error = e;
   }
 }
 

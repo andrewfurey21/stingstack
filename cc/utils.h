@@ -81,7 +81,6 @@ typedef struct {
 } error;
 
 void error_set(error *e, const char *message, error_type type);
-void error_copy(error *destination, error *source);
 
 // Linux file read/write helpers
 void linux_file_open(const char *file_path,

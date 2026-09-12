@@ -5,12 +5,6 @@ void error_set(error *e, const char *message, error_type type) {
   e->type = type;
 }
 
-// TODO: do i really need this?
-void error_copy(error *destination, error *source) {
-  destination->message = source->message;
-  destination->type = source->type;
-}
-
 void panic_or_note_if(const b8 expr,
                          const b8 crash_program,
                          const char *file,
