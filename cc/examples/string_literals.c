@@ -6,12 +6,15 @@
 
 "this is an example" " of " ""  ""
 
-"multiple strings in diffeerent quotes"
+"multiple strings in different quotes"
 
 "sometimes\n"
 
 "it's\"useful.\""
 
+// TODO: add simple, numeric, unicode escape sequences
+
+"😅"
 //
 ""
 //""""

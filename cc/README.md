@@ -4,16 +4,20 @@
 - mlir
 - tcc
 - qbe
+- cranelift
+- 8cc
 - booth
 - cuik
 
-## todo
+## cool milestones would be...
 
-- return better error for alloc, file open.
-- tokenize string literals
-- tokenize integer and floating point literals.
-
-## parts i'm leaving out for now.
-
-- float hexadecimals, long doubles
-- wide chars
+- ssa, sea of nodes, AIR
+- x86 codegen
+- self-compile
+- riscv codegen
+- arm codegen
+- my own os, libc etc.
+- doom
+- cuda c, ptx
+- llm.c
+- parse llvm, mlir, qbe

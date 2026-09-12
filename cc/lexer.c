@@ -1,22 +1,22 @@
 #include "lexer.h"
-#include "alloc.h"
-#include "file.h"
-#include "utils.h"
 
-void tokens_setup(Tokens *tokens, file *f, void *buffer) {
+void tokens_setup(Tokens *tokens, file_read *f, void *buffer, u32 capacity) {
   tokens->tokens = buffer;
   tokens->f = f;
   tokens->num_tokens = 0;
   tokens->location.line = 1;
   tokens->location.column = 0;
+  tokens->capacity = capacity;
+
+  error_set(&tokens->tokenizing_error, NULL, NO_ERROR_YET);
 }
 
 void token_build(Tokens *tokens,
                  TokenType type, u32 file_index, u32 length,
                  const char *error_msg) {
 
-  PANIC_IF(tokens->num_tokens >= CC_MAX_NUM_TOKENS,
-           "Reached maximum number of tokens (%d).", CC_MAX_NUM_TOKENS);
+  PANIC_IF(tokens->num_tokens >= tokens->capacity,
+           "Reached maximum number of tokens (%d).", tokens->capacity);
 
   tokens->tokens[tokens->num_tokens].type = type;
   tokens->tokens[tokens->num_tokens].length = length;
@@ -36,25 +36,14 @@ void token_build(Tokens *tokens,
   tokens->tokens[tokens->num_tokens].error_msg = error_msg;
 
   tokens->num_tokens++;
-
 }
 
-void tokenize(Tokens *tokens, file *f, GlobalArena *arena) {
+void tokenize(Tokens *tokens) {
 
-  if (f->file_error.type == FAILED) {
-    tokens->tokenizing_error.type = FAILED;
-    tokens->tokenizing_error.message = "tokenize(): could not read from file.";
+  if (file_read_failed(tokens->f)) {
+    error_set(&tokens->tokenizing_error, "tokenize(): File read failed.", FAILED);
     return;
-  } else {
-    tokens->tokenizing_error.type = SUCCESS;
-    tokens->tokenizing_error.message = NULL;
   }
-
-  void *tokens_buffer =
-    global_arena_aligned_alloc(arena,
-                               sizeof(Token) * CC_MAX_NUM_TOKENS,
-                               alignof(Token));
-  tokens_setup(tokens, f, tokens_buffer);
 
   u64 byte_index = 0;
   for (u32 token_num_bytes = 0; byte_index < tokens->f->num_bytes;
@@ -74,10 +63,9 @@ void tokenize(Tokens *tokens, file *f, GlobalArena *arena) {
       if (token_num_bytes > 0) continue;
     }
 
-    if (is_number_related(byte)) {
-      token_num_bytes = tokenize_number(tokens, byte_index);
-      if (token_num_bytes > 0) continue;
-    }
+    // if (is_string_literal_related(byte)) {
+    //   token_num_bytes = tokenize_string_literal(tokens, byte_index);
+    // }
 
     token_build(tokens, TOKEN_ERROR, byte_index, 1, "Unknown token.");
     token_num_bytes = 1;
@@ -91,33 +79,14 @@ void tokenize(Tokens *tokens, file *f, GlobalArena *arena) {
 
   NOTE("End location line: %d, column: %d.",
        tokens->location.line, tokens->location.column);
+
+  error_set(&tokens->tokenizing_error, NULL, SUCCESS);
 }
 
-
-b8 is_whitespace(i8 byte) {
-  return byte == '\t' || byte == '\n' || byte == '\v' ||
-         byte == '\f' || byte == '\r' || byte == ' ';
-}
-
-b8 is_start_of_comment(i8 byte) {
-  return byte == '/';
-}
-
-b8 is_number(i8 byte) {
-  return (byte >= '0' && byte <= '9');
-}
-
-b8 is_number_related(i8 byte) {
-  return is_number(byte) || byte == '.';
-}
-
-b8 is_floating_point_suffix(i8 byte) {
-  return byte == 'f' || byte == 'F';
-}
 
 // Each token generation function has to return the number of bytes it consumed
 
-u32 skip_whitespace(file *f, file_location *location, u32 start_of_whitespace) {
+u32 skip_whitespace(file_read *f, file_location *location, u32 start_of_whitespace) {
   u32 whitespace_in_bytes = 0;
   i8 whitespace = file_read_byte(f, start_of_whitespace);
 
@@ -155,7 +124,7 @@ u32 skip_if_comment(Tokens *tokens, u32 possible_start_of_comment) {
                                            CC_NEW_LINE_CHAR);
     const u32 end_of_comment_or_eof =
       possible_start_of_comment + num_bytes_to_skip_from_start_of_comment;
-    if (!file_at_end(tokens->f, end_of_comment_or_eof)) {
+    if (!file_read_at_end(tokens->f, end_of_comment_or_eof)) {
       file_location_add_new_line(&tokens->location);
       num_bytes_to_skip_from_start_of_comment++;
     } else {
@@ -167,14 +136,14 @@ u32 skip_if_comment(Tokens *tokens, u32 possible_start_of_comment) {
   // Should return error token if no ending '*/'.
   else if (byte_after_start_of_comment == '*') {
     num_bytes_to_skip_from_start_of_comment =
-      num_bytes_until_end_of_matching_string_or_eof(tokens->f,
+      num_bytes_until_end_of_substring_or_eof(tokens->f,
                                              possible_start_of_comment + 2,
                                              "*/") + 2;
 
     const u32 end_of_comment_or_eof =
       possible_start_of_comment + num_bytes_to_skip_from_start_of_comment;
 
-    if (file_at_end(tokens->f, end_of_comment_or_eof)) {
+    if (file_read_at_end(tokens->f, end_of_comment_or_eof)) {
       token_build(tokens,
                   TOKEN_ERROR,
                   possible_start_of_comment,
@@ -193,126 +162,18 @@ u32 skip_if_comment(Tokens *tokens, u32 possible_start_of_comment) {
   return num_bytes_to_skip_from_start_of_comment;
 }
 
-b8 match_next_bytes(file *f, u32 start_of_token_in_file,
-                    const char *match_string) {
-  const u32 match_len = strlen(match_string);
-  PANIC_IF(match_len + start_of_token_in_file >= f->num_bytes,
-           "Cannot search for match %s in file %s because file length is %d"
-           " and match would end at %d.",
-           match_string, f->path, f->num_bytes,
-           match_len + start_of_token_in_file);
+u32 tokenize_string_literal(Tokens *tokens, u32 start_of_token_index) {
 
-  b8 found_match = true;
-
-  for (u32 match_index = 0; match_index < match_len; match_index++) {
-    const i8 match = match_string[match_index];
-    if (!match_next_byte(f, start_of_token_in_file + match_index, match)) {
-      found_match = false;
-      break;
-    }
-  }
-
-  return found_match;
-}
-
-b8 match_next_byte(file *f, u32 start_of_token_in_file, char match) {
-  i8 next_byte = peek_next_byte(f, start_of_token_in_file);
-  return next_byte == match;
-}
-
-i8 peek_next_byte(file *f, u32 start_of_token_in_file) {
-  return file_read_byte(f, start_of_token_in_file + 1);
-}
-
-u32 num_bytes_until_matching_byte_or_eof(file *f, u32 start_index, i8 match) {
-  u32 number_of_bytes = 0;
-  i8 current_byte  = file_read_byte_or_eof(f, start_index + number_of_bytes);
-  while (current_byte != match && current_byte != CC_END_OF_FILE_CHAR) {
-    number_of_bytes++;
-    current_byte  = file_read_byte_or_eof(f, start_index + number_of_bytes);
-  }
-
-  NOTE_IF(current_byte == CC_END_OF_FILE_CHAR,
-          "Found end of file while matching 0x%x", match);
-  return number_of_bytes;
-}
-
-u32 num_bytes_until_end_of_matching_string_or_eof(file *f,
-                                           const u32 start_index,
-                                           const char *substring) {
-  // Typically substring is tiny compared to file. So naive is probably fine.
-  const u32 string_len = strlen(substring);
-  u32 substring_index = start_index;
-
-  b8 substring_match = false;
-  while (!substring_match && !file_at_end(f, substring_index + string_len - 1)) {
-    substring_match = true;
-
-    for (u32 string_index = 0; string_index < string_len; string_index++) {
-      const i8 current_file_byte =
-        file_read_byte(f, substring_index + string_index);
-      const i8 current_substring_byte = substring[string_index];
-      if (current_file_byte != current_substring_byte) {
-        substring_match = false;
-        break;
-      }
-    }
-
-    if (!substring_match) substring_index++;
-  }
-
-  NOTE_IF(!(file_at_end(f, substring_index + string_len - 1) || substring_match),
-          "Should either be at the end of the file, or found a substring match.");
-
-  if (file_at_end(f, substring_index + string_len - 1)) {
-    return (substring_index + string_len - 1) - start_index;
-  } else {
-    return substring_index - start_index + string_len;
-  }
-}
-
-u32 tokenize_number(Tokens *tokens, u32 start_of_token_index) {
-  // TODO: add floating point hexadecimal support
-  Token *current_token = &tokens->tokens[tokens->num_tokens - 1];
-  i8 current_byte = file_read_byte(tokens->f, start_of_token_index);
-  b8 found_point_already = false;
-
-  TokenType type = TOKEN_INT_LITERAL;
-
-  // Can't be floats: 0b/0x/0o, so for 0x, don't check float prefix.
-  if (current_byte == '.') {
-    found_point_already = true;
-    type = TOKEN_FLOAT_LITERAL;
-    if (!is_number(peek_next_byte(tokens->f, start_of_token_index))) {
-      return 0;
-    }
-  }
-
-  // keep going until second dot or not numeric.
-  u32 end_of_token_index = start_of_token_index;
-  while (is_number_related(peek_next_byte(tokens->f, end_of_token_index))) {
-    current_byte = peek_next_byte(tokens->f, end_of_token_index);
-    end_of_token_index++;
-
-    if (current_byte == '.') {
-      if (found_point_already) {
-
-      } else {
-
-      }
-    }
-  }
-
-  // check float prefix. only allowed with dot = true;
-  // if alpha, keep going until non-alphanumeric, generate error token.
-
-  u32 token_length = end_of_token_index - start_of_token_index;
-  NOTE_IF(token_length == 0,
-          "Length of number token should not be zero.");
+  // u32 token_length = end_of_token_index - start_of_token_index;
+  // NOTE_IF(token_length == 0,
+          // "Length of number token should not be zero.");
 
   // Could be an error token.
-  token_build(tokens, type, start_of_token_index, token_length, NULL);
-  return token_length;
+  // token_build(tokens, type, start_of_token_index, token_length, NULL);
+  // return token_length;
+
+
+  return 0;
 }
 
 u32 tokens_display_errors(Tokens *tokens) {

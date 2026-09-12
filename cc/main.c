@@ -6,41 +6,48 @@
 
 int main(int argc, char **argv) {
 
-  // const char *compilation_unit_paths[] = {
-  //   "examples/empty.c",
-  //   "examples/whitespace_and_comments.c",
-  //   "examples/whitespace_and_comments2.c",
-  //   "shouldn't work",
-  //   "examples/whitespace_and_comments3.c",
-  // };
+  const char *compilation_unit_paths[] = {
+    "examples/empty.c",
+    "examples/whitespace_and_comments.c",
+    "examples/whitespace_and_comments2.c",
+    "shouldn't work",
+    "examples/whitespace_and_comments3.c",
+  };
 
   GlobalArena global_arena;
   global_arena_clear(&global_arena);
 
-  // for (u32 i = 0; i < STATIC_ARRAY_LENGTH(compilation_unit_paths); i++) {
-  //   NOTE("Compiling \"%s\"...", compilation_unit_paths[i]);
-  //   global_arena_clear(&global_arena);
 
-  //   file f = { 0 };
-  //   file_copy_into_memory(&f,
-  //                         compilation_unit_paths[i],
-  //                         &global_arena);
+  void *file_buffer =
+    global_arena_aligned_alloc(&global_arena,
+                               CC_MAX_FILE_NUM_BYTES * sizeof(i8),
+                               alignof(i8));
 
-  //   Tokens tokens;
-  //   tokenize(&tokens, &f, &global_arena);
-  //   const b8 num_token_errors = tokens_display_errors(&tokens);
+  file_read f = { 0 };
+  file_read_setup_memory(&f, file_buffer, CC_MAX_FILE_NUM_BYTES);
 
-  //   printf("-------------------------------------\n");
-  // }
+  void *token_buffer =
+    global_arena_aligned_alloc(&global_arena,
+                               CC_MAX_TOKEN_BUFFER_LENGTH * sizeof(Token),
+                               alignof(i8));
 
-  file_write compiled;
-  void *compiled_buffer =
-    global_arena_aligned_alloc(&global_arena, 1024, alignof(i8));
-  file_write_setup(&compiled, compiled_buffer, "finished.asm", 1024, true);
+  Tokens tokens = { 0 };
+  tokens_setup(&tokens, &f, token_buffer, CC_MAX_NUM_TOKENS);
 
-  const char *write_this = "push rbp ; this is some x86 :O";
-  file_write_append_bytes(&compiled, write_this, strlen(write_this));
-  file_flush_to_disk(&compiled);
+  for (u32 i = 0; i < STATIC_ARRAY_LENGTH(compilation_unit_paths); i++) {
+    printf("-------------------------------------\n");
+    NOTE("Compiling \"%s\"...", compilation_unit_paths[i]);
+
+    file_read_change_path(&f, compilation_unit_paths[i]);
+    file_read_into_memory(&f);
+
+    if (file_read_failed(&f)) { file_read_display_error(&f); continue; }
+
+    tokenize(&tokens);
+    const b8 num_token_errors = tokens_display_errors(&tokens);
+
+    // file_read_close(&f);
+  }
 
   return 0;
 }
