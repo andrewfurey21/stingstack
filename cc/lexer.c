@@ -1,4 +1,6 @@
 #include "lexer.h"
+#include "file.h"
+#include "utils.h"
 
 void tokens_setup(Tokens *tokens, file_read *f, void *buffer, u32 capacity) {
   tokens->tokens = buffer;
@@ -49,6 +51,7 @@ void tokenize(Tokens *tokens) {
   for (u32 token_num_bytes = 0; byte_index < tokens->f->num_bytes;
        byte_index += token_num_bytes) {
 
+    // consume everything needed. byte_index + token_num_bytes should produce a byte not read yet.
     token_num_bytes = 0;
     const i8 byte = file_read_byte(tokens->f, byte_index);
 
@@ -63,9 +66,10 @@ void tokenize(Tokens *tokens) {
       if (token_num_bytes > 0) continue;
     }
 
-    // if (is_string_literal_related(byte)) {
-    //   token_num_bytes = tokenize_string_literal(tokens, byte_index);
-    // }
+    if (is_c_string_literal_related(byte)) {
+      token_num_bytes = tokenize_string_literal(tokens, byte_index);
+      if (token_num_bytes > 0) continue; // TODO: check this returns correctly.
+    }
 
     token_build(tokens, TOKEN_ERROR, byte_index, 1, "Unknown token.");
     token_num_bytes = 1;
@@ -162,17 +166,31 @@ u32 skip_if_comment(Tokens *tokens, u32 possible_start_of_comment) {
   return num_bytes_to_skip_from_start_of_comment;
 }
 
+
 u32 tokenize_string_literal(Tokens *tokens, u32 start_of_token_index) {
 
-  // u32 token_length = end_of_token_index - start_of_token_index;
-  // NOTE_IF(token_length == 0,
-          // "Length of number token should not be zero.");
+  u32 current_index = start_of_token_index;
+  i8 current_byte;
+  // I know, I just wanna stress my compiler compiling itself.
+  while ((current_byte = file_read_byte_or_eof(tokens->f, ++current_index)) != CC_END_OF_FILE_CHAR) {
+    if (current_byte == '\"') break;
+    // TODO: simple and numeric escape sequences
+  }
 
-  // Could be an error token.
-  // token_build(tokens, type, start_of_token_index, token_length, NULL);
+  u32 token_length;
+  if (current_byte == CC_END_OF_FILE_CHAR) {
+    current_index - start_of_token_index;
+    token_build(tokens, TOKEN_ERROR, start_of_token_index, token_length,
+                "tokenize_string_literal(): Reached early eof when reading a string literal.");
+
+  } else if (current_byte == '\"') {
+    token_length = current_index - start_of_token_index + 1;
+    token_build(tokens, TOKEN_STRING_LITERAL, start_of_token_index, token_length, NULL);
+  } else {
+    NOTE("tokenize_string_literal(): Should either reach eof, or \".");
+  }
+
   // return token_length;
-
-
   return 0;
 }
 

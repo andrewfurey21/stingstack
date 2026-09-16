@@ -75,6 +75,7 @@ typedef enum {
   SUCCESS, FAILED, NO_ERROR_YET, FORBIDDEN
 } error_type;
 
+//  TODO: stack unwinding with an array of messages. also fix error messages.
 typedef struct {
   const char *message;
   error_type type;

@@ -27,6 +27,15 @@ b8 is_hexadecimal(i8 byte) {
          (byte >= 'A' && byte <= 'F');
 }
 
+b8 is_octal(i8 byte) {
+  return byte >= '0' && byte <= '7';
+}
+
+b8 is_c_string_literal_related(i8 byte) {
+  // return (byte == 'L' || byte == '\"');
+  return byte == '\"';
+}
+
 b8 match_next_bytes(file_read *f, u32 start_of_token_in_file,
                     const char *match_string) {
   const u32 match_len = strlen(match_string);
