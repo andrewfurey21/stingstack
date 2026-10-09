@@ -16,7 +16,7 @@ typedef unsigned int u32;
 #define CC_DEBUG
 #define CC_GLOBAL_ARENA_SIZE 1024 * 128
 #define CC_MAX_FILE_NUM_BYTES 512
-#define CC_DEBUG_BYTE_VALUE 0xDE
+#define CC_DEBUG_BYTE_VALUE 0xDB
 #define CC_DEBUG_PTR_VALUE NULL
 #define CC_MAX_TOKEN_LENGTH 255
 #define CC_MAX_NUM_TOKENS 10
@@ -76,6 +76,10 @@ typedef enum {
 } error_type;
 
 //  TODO: stack unwinding with an array of messages. also fix error messages.
+//  this should be 1 static object.
+//  sort of a hacky version of stack unwinding to help find bugs
+//  since compilers involve a lot of deep state this is probably something i want.
+//  this means allocations like malloc are just a bad idea. especially if you can recover.
 typedef struct {
   const char *message;
   error_type type;

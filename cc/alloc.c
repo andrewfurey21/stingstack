@@ -16,6 +16,7 @@ void *global_arena_aligned_alloc(GlobalArena *arena,
            " of two and greater than 0.", alignment);
 
   // trying to be branchless :)
+  // TODO: why did i negate here?
   b8 is_aligned = (!!(arena->position & ~(alignment - 1)));
   u32 offset =  (alignment - arena->position & (alignment - 1));
 
