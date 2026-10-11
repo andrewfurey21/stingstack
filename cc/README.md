@@ -9,15 +9,18 @@
 - booth
 - cuik
 
-## cool milestones would be...
+## things to look into
 
-- ssa, sea of nodes, AIR
-- x86 codegen
-- self-compile
-- riscv codegen
-- arm codegen
-- my own os, libc etc.
-- doom
-- cuda c, ptx
-- llm.c
-- parse llvm, mlir, qbe
+- ssa, sea of nodes
+- llvm ir, mlir, qbe
+
+## links
+
+- csmith and yarpgen
+
+## features I would add
+
+- f strings would be handy.
+- namespaces
+- zig comptime or similar for some sort of generic support
+- methods, but just syntax sugar maybe. idk.
