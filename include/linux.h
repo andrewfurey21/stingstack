@@ -76,11 +76,7 @@ static inline void *linux_page_alloc(u32 num_bytes) {
                           file_descriptor,
                           offset);
 
-#ifdef DEBUG
-  for (u32 i = 0; i < num_bytes; i++) {
-    buffer[i] = DEBUG_BYTE_VALUE;
-  }
-#endif
+  debug_clear_array(buffer, num_bytes);
   return buffer;
 
 }

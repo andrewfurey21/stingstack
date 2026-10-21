@@ -22,15 +22,7 @@ static inline Arena arena_setup(u8 *memory, u32 bytes_reserved) {
 }
 
 static inline void arena_clear(Arena *arena) {
-
-#ifdef DEBUG
-
-  for (u32 i = 0; i < arena->bytes_reserved; i++) {
-    arena->memory[i] = DEBUG_BYTE_VALUE;
-  }
-
-#endif
-
+  debug_clear_array(arena->memory, arena->bytes_reserved);
   arena->bytes_used = 0;
 }
 

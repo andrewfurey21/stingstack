@@ -1,7 +1,7 @@
 #ifndef DEBUG_H
 #define DEBUG_H
 
-#define DEBUG
+#define DEBUG 1
 #define DEBUG_BYTE_VALUE 0xDB
 #define DEBUG_PTR_VALUE NULL
 
@@ -70,4 +70,15 @@ static inline void panic_or_note_if(const b8 expr,
 #define NOTE(fmt, ...) \
   panic_or_note_if(true, false, __FILE__, __func__, __LINE__, fmt, ##__VA_ARGS__, NULL)
 
+#define debug_clear_array(memory, size)           \
+  do {                                            \
+    if (DEBUG) {                                  \
+      const u32 s_ = (size);                      \
+      for (u32 di_ = 0; di_ < s_; di_++) {        \
+        (memory)[di_] = DEBUG_BYTE_VALUE;         \
+        }                                         \
+    }                                             \
+  } while (0)
+
 #endif
+
