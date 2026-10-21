@@ -42,15 +42,21 @@ static inline b8 is_c_string_literal_related(i8 byte) {
 }
 
 static inline i8 peek_next_byte(file *f, u32 start_of_token_in_file) {
-  return file_read_byte(f, start_of_token_in_file + 1);
+  CALL;
+  i8 byte = file_read_byte(f, start_of_token_in_file + 1);
+
+  RETURN_VAL(byte);
 }
 
 static inline b8 match_next_byte(file *f, u32 start_of_token_in_file, char match) {
+  CALL;
   i8 next_byte = peek_next_byte(f, start_of_token_in_file);
-  return next_byte == match;
+
+  RETURN_VAL(next_byte == match);
 }
 
 static inline b8 match_next_bytes(file *f, u32 start_of_token_in_file, const char *match_string) {
+  CALL;
   const u32 match_len = strlen(match_string);
   PANIC_IF(match_len + start_of_token_in_file >= f->bytes_used,
            "Cannot search for match %s in file %s because file length is %d"
@@ -68,10 +74,11 @@ static inline b8 match_next_bytes(file *f, u32 start_of_token_in_file, const cha
     }
   }
 
-  return found_match;
+  RETURN_VAL(found_match);
 }
 
 static inline u32 num_bytes_until_matching_byte_or_eof(file *f, u32 start_index, i8 match) {
+  CALL;
   u32 number_of_bytes = 0;
   i8 current_byte  = file_read_byte_or_eof(f, start_index + number_of_bytes);
   while (current_byte != match && current_byte != END_OF_FILE_CHAR) {
@@ -81,11 +88,12 @@ static inline u32 num_bytes_until_matching_byte_or_eof(file *f, u32 start_index,
 
   NOTE_IF(current_byte == END_OF_FILE_CHAR,
           "Found end of file while matching 0x%x", match);
-  return number_of_bytes;
+  RETURN_VAL(number_of_bytes);
 }
 
 static inline u32 num_bytes_until_end_of_substring_or_eof
   (file *f, const u32 start_index, const char *substring) {
+  CALL;
 
   // Typically substring is tiny compared to file. So naive is probably fine.
   const u32 string_len = strlen(substring);
@@ -112,9 +120,9 @@ static inline u32 num_bytes_until_end_of_substring_or_eof
           "Should either be at the end of the file, or found a substring match.");
 
   if (file_at_end(f, substring_index + string_len - 1)) {
-    return (substring_index + string_len - 1) - start_index;
+    RETURN_VAL((substring_index + string_len - 1) - start_index);
   } else {
-    return substring_index - start_index + string_len;
+    RETURN_VAL(substring_index - start_index + string_len);
   }
 }
 

@@ -14,6 +14,7 @@ void tokens_setup(Tokens *tokens, file *f, void *buffer, u32 capacity) {
 void token_build(Tokens *tokens,
                  TokenType type, u32 file_index, u32 length,
                  const char *error_msg) {
+  CALL;
 
   PANIC_IF(tokens->num_tokens >= tokens->capacity,
            "Reached maximum number of tokens (%d).", tokens->capacity);
@@ -36,13 +37,16 @@ void token_build(Tokens *tokens,
   tokens->tokens[tokens->num_tokens].error_msg = error_msg;
 
   tokens->num_tokens++;
+
+  RETURN;
 }
 
 void tokenize(Tokens *tokens) {
+  CALL;
 
   if (file_failed(tokens->f)) {
     error_set(&tokens->tokenizing_error, FAILED, "tokenize(): File read failed.");
-    return;
+    RETURN;
   }
 
   u32 byte_index = 0;
@@ -83,12 +87,16 @@ void tokenize(Tokens *tokens) {
        tokens->location.line, tokens->location.column);
 
   error_set(&tokens->tokenizing_error, SUCCESS, NULL);
+
+  RETURN;
 }
 
 
 // Each token generation function has to return the number of bytes it consumed
 
 u32 skip_whitespace(file *f, file_location *location, u32 start_of_whitespace) {
+  CALL;
+
   u32 whitespace_in_bytes = 0;
   i8 whitespace = file_read_byte(f, start_of_whitespace);
 
@@ -101,10 +109,12 @@ u32 skip_whitespace(file *f, file_location *location, u32 start_of_whitespace) {
     whitespace = file_read_byte_or_eof(f, start_of_whitespace + whitespace_in_bytes);
   }
 
-  return whitespace_in_bytes;
+  RETURN_VAL(whitespace_in_bytes);
 }
 
 u32 skip_if_comment(Tokens *tokens, u32 possible_start_of_comment) {
+  CALL;
+
   const i8 byte_after_start_of_comment =
     file_read_byte_or_eof(tokens->f, possible_start_of_comment + 1);
 
@@ -161,11 +171,12 @@ u32 skip_if_comment(Tokens *tokens, u32 possible_start_of_comment) {
     num_bytes_to_skip_from_start_of_comment = 0;
   }
 
-  return num_bytes_to_skip_from_start_of_comment;
+  RETURN_VAL(num_bytes_to_skip_from_start_of_comment);
 }
 
 
 u32 tokenize_string_literal(Tokens *tokens, u32 start_of_token_index) {
+  CALL;
 
   u32 current_index = start_of_token_index;
   i8 current_byte;
@@ -188,8 +199,7 @@ u32 tokenize_string_literal(Tokens *tokens, u32 start_of_token_index) {
     NOTE("tokenize_string_literal(): Should either reach eof, or \".");
   }
 
-  // return token_length;
-  return 0;
+  RETURN_VAL(token_length);
 }
 
 u32 tokens_display_errors(Tokens *tokens) {

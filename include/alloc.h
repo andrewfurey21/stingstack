@@ -27,6 +27,8 @@ static inline void arena_clear(Arena *arena) {
 }
 
 static inline void *arena_alloc(Arena *arena, u32 num_bytes, u32 alignment) {
+  CALL;
+
   PANIC_IF(!is_power_of_two(alignment),
            "Cannot have alignment of %d, must be a power of 2.", alignment);
 
@@ -42,7 +44,8 @@ static inline void *arena_alloc(Arena *arena, u32 num_bytes, u32 alignment) {
   arena->bytes_used += is_aligned * address;
   void *memory = arena->memory + arena->bytes_used;
   arena->bytes_used += num_bytes;
-  return memory;
+
+  RETURN_VAL(memory);
 }
 
 #endif

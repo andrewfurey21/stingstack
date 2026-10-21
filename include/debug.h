@@ -4,36 +4,22 @@
 #define DEBUG 1
 #define DEBUG_BYTE_VALUE 0xDB
 #define DEBUG_PTR_VALUE NULL
+#define STACK_DEPTH 10
 
 
 #include "includes.h"
 #include "defines.h"
 #include "typedefs.h"
 
-typedef enum {
-  SUCCESS, FAILED, NO_ERROR_YET, FORBIDDEN
-} error_type;
+struct Call_Stack {
+  u32 depth;
+  const char *function_names[STACK_DEPTH];
+  u32 lines[STACK_DEPTH];
+};
 
-//  TODO: stack unwinding with an array of messages. also fix error messages.
-//  TODO: this would be very useful, especially for compiler dev.
-//  this should be 1 static object.
-//  sort of a hacky version of stack unwinding to help find bugs
-//  since compilers involve a lot of deep state this is probably something i want.
-//  this means allocations like malloc are just a bad idea. especially if you can recover.
-// should have a define or something, for debug mode only.
-// panics should print that stack trace.
-typedef struct {
-  // TODO: make this a format_string or something. string_builder
-  const char *message;
-  error_type type;
-} error;
-
-// TODO: message should be some sort of formatting string
-static inline void error_set(error *e, error_type type, const char *message) {
-  e->message = message;
-  e->type = type;
-}
-
+#ifdef DEBUG
+static struct Call_Stack call_stack = { 0 };
+#endif
 
 static inline void panic_or_note_if(const b8 expr,
                                     const b8 crash_program,
@@ -51,7 +37,14 @@ static inline void panic_or_note_if(const b8 expr,
     printf("in %s:%s() at line %u: ", file, func, line);
     vprintf(fmt, args);
     printf("\n");
-    if (crash_program) exit(-1);
+
+    if (crash_program) {
+      printf("Call Stack:\n");
+      for (u32 i = 0; i < call_stack.depth; i++) {
+        printf("Line %d:%s\n", call_stack.lines[i], call_stack.function_names[i]);
+      }
+      exit(-1);
+    }
   }
   va_end(args);
 #endif
@@ -70,15 +63,55 @@ static inline void panic_or_note_if(const b8 expr,
 #define NOTE(fmt, ...) \
   panic_or_note_if(true, false, __FILE__, __func__, __LINE__, fmt, ##__VA_ARGS__, NULL)
 
-#define debug_clear_array(memory, size)           \
-  do {                                            \
-    if (DEBUG) {                                  \
-      const u32 s_ = (size);                      \
-      for (u32 di_ = 0; di_ < s_; di_++) {        \
-        (memory)[di_] = DEBUG_BYTE_VALUE;         \
-        }                                         \
-    }                                             \
+#define debug_clear_array(memory, size)    \
+  do {                                     \
+    if (DEBUG) {                           \
+      const u32 s_ = (size);               \
+      for (u32 di_ = 0; di_ < s_; di_++) { \
+        (memory)[di_] = DEBUG_BYTE_VALUE;  \
+      }                                    \
+    }                                      \
   } while (0)
+
+typedef enum {
+  SUCCESS, FAILED, NO_ERROR_YET, FORBIDDEN
+} error_type;
+
+typedef struct {
+  // TODO: make this a format_string or something. string_builder
+  const char *message;
+  error_type type;
+} error;
+
+static inline void call_or_return(const char *name, u32 line, b8 call) {
+  PANIC_IF(call_stack.depth >= STACK_DEPTH, "Call stack too deep.");
+  if (call) {
+    call_stack.function_names[call_stack.depth] = name;
+    call_stack.lines[call_stack.depth] = line;
+    call_stack.depth++;
+  } else if (call_stack.depth > 0) {
+    call_stack.depth--;
+  }
+}
+
+#ifdef DEBUG
+#define CALL call_or_return(__FUNCTION__, __LINE__, true)
+#define RETURN call_or_return(__FUNCTION__, __LINE__, false); return
+#define RETURN_VAL(x) call_or_return(__FUNCTION__, __LINE__, false); return (x)
+#else
+#define CALL
+#define RETURN(x) return (x)
+#endif
+
+// TODO: message should be some sort of formatting string
+static inline void error_set(error *e, error_type type, const char *message) {
+  CALL;
+  e->message = message;
+  e->type = type;
+  RETURN;
+}
+
+
 
 #endif
 
