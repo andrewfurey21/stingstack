@@ -1,8 +1,8 @@
-#include "../utils/utils.h"
+#include "../utils/utils.h"  // TODO: make a sting.h that has all utils these included.
+#include "../utils/file.h"
 
 #include "defines.h"
 #include "alloc.h"
-#include "file.h"
 #include "lexer.h"
 
 int main(int argc, char **argv) {
@@ -24,9 +24,10 @@ int main(int argc, char **argv) {
                                MAX_FILE_NUM_BYTES * sizeof(i8),
                                alignof(i8));
 
-  file_read f = { 0 };
-  file_read_setup_memory(&f, file_buffer, MAX_FILE_NUM_BYTES);
+  file f = { 0 };
+  file_setup(&f, file_buffer, MAX_FILE_NUM_BYTES, NULL);
 
+  // TODO: remove this global arena shite. make a u8 buffer[length], pass to some arena struct.
   void *token_buffer =
     global_arena_aligned_alloc(&global_arena,
                                CC_MAX_TOKEN_BUFFER_LENGTH * sizeof(Token),
@@ -39,15 +40,15 @@ int main(int argc, char **argv) {
     printf("-------------------------------------\n");
     NOTE("Compiling \"%s\"...", compilation_unit_paths[i]);
 
-    file_read_change_path(&f, compilation_unit_paths[i]);
+    file_change_path(&f, compilation_unit_paths[i]);
     file_read_into_memory(&f);
 
-    if (file_read_failed(&f)) { file_read_display_error(&f); continue; }
+    if (file_failed(&f)) { file_display_error(&f); continue; }
 
     tokenize(&tokens);
     const b8 num_token_errors = tokens_display_errors(&tokens);
 
-    // file_read_close(&f);
+    file_close(&f);
   }
 
   return 0;

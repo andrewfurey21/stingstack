@@ -2,9 +2,7 @@
 #ifndef CC_LEXER_H
 #define CC_LEXER_H
 
-#include "../utils/utils.h"
-#include "file.h"
-#include "lexing.h"
+#include "../utils/lexing.h"
 
 enum TokenType: u8 {
 
@@ -130,21 +128,21 @@ typedef struct {
 
 typedef struct {
   Token *tokens;
-  file_read *f;
+  file *f;
   file_location location; // location of cursor.
   u32 num_tokens;
   u32 capacity;
   error tokenizing_error;
 } Tokens;
 
-void tokens_setup(Tokens *tokens, file_read *f, void *buffer, u32 capacity);
+void tokens_setup(Tokens *tokens, file *f, void *buffer, u32 capacity);
 void tokenize(Tokens *tokens);
 void token_build(Tokens *tokens,
-                 TokenType type, u32 file_read_index, u32 length,
+                 TokenType type, u32 file_index, u32 length,
                  const char *error_msg);
 
 // Token generation
-u32 skip_whitespace(file_read *f, file_location *location, u32 start_of_whitespace);
+u32 skip_whitespace(file *f, file_location *location, u32 start_of_whitespace);
 u32 skip_if_comment(Tokens *tokens, u32 possible_start_of_comment);
 u32 tokenize_string_literal(Tokens *tokens, u32 start_of_token_index);
 

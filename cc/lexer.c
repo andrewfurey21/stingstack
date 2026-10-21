@@ -1,8 +1,8 @@
 #include "lexer.h"
-#include "file.h"
+#include "defines.h"
 #include "../utils/utils.h"
 
-void tokens_setup(Tokens *tokens, file_read *f, void *buffer, u32 capacity) {
+void tokens_setup(Tokens *tokens, file *f, void *buffer, u32 capacity) {
   tokens->tokens = buffer;
   tokens->f = f;
   tokens->num_tokens = 0;
@@ -42,13 +42,13 @@ void token_build(Tokens *tokens,
 
 void tokenize(Tokens *tokens) {
 
-  if (file_read_failed(tokens->f)) {
+  if (file_failed(tokens->f)) {
     error_set(&tokens->tokenizing_error, FAILED, "tokenize(): File read failed.");
     return;
   }
 
   u64 byte_index = 0;
-  for (u32 token_num_bytes = 0; byte_index < tokens->f->num_bytes;
+  for (u32 token_num_bytes = 0; byte_index < tokens->f->bytes_used;
        byte_index += token_num_bytes) {
 
     // consume everything needed. byte_index + token_num_bytes should produce a byte not read yet.
@@ -75,9 +75,9 @@ void tokenize(Tokens *tokens) {
     token_num_bytes = 1;
   }
 
-  PANIC_IF(byte_index != tokens->f->num_bytes,
+  PANIC_IF(byte_index != tokens->f->bytes_used,
            "Did not correctly finish reading. Length of %s is %d but read until %d.",
-           tokens->f->path, tokens->f->num_bytes, byte_index);
+           tokens->f->path, tokens->f->bytes_used, byte_index);
 
   token_build(tokens, TOKEN_EOF, 0, byte_index, NULL);
 
@@ -90,7 +90,7 @@ void tokenize(Tokens *tokens) {
 
 // Each token generation function has to return the number of bytes it consumed
 
-u32 skip_whitespace(file_read *f, file_location *location, u32 start_of_whitespace) {
+u32 skip_whitespace(file *f, file_location *location, u32 start_of_whitespace) {
   u32 whitespace_in_bytes = 0;
   i8 whitespace = file_read_byte(f, start_of_whitespace);
 
@@ -110,7 +110,7 @@ u32 skip_if_comment(Tokens *tokens, u32 possible_start_of_comment) {
   const i8 byte_after_start_of_comment =
     file_read_byte_or_eof(tokens->f, possible_start_of_comment + 1);
 
-  if (byte_after_start_of_comment == CC_END_OF_FILE_CHAR) {
+  if (byte_after_start_of_comment == END_OF_FILE_CHAR) {
     // Token error, early eof.
     token_build(tokens,
                 TOKEN_ERROR,
@@ -128,7 +128,7 @@ u32 skip_if_comment(Tokens *tokens, u32 possible_start_of_comment) {
                                            CC_NEW_LINE_CHAR);
     const u32 end_of_comment_or_eof =
       possible_start_of_comment + num_bytes_to_skip_from_start_of_comment;
-    if (!file_read_at_end(tokens->f, end_of_comment_or_eof)) {
+    if (!file_at_end(tokens->f, end_of_comment_or_eof)) {
       file_location_add_new_line(&tokens->location);
       num_bytes_to_skip_from_start_of_comment++;
     } else {
@@ -147,7 +147,7 @@ u32 skip_if_comment(Tokens *tokens, u32 possible_start_of_comment) {
     const u32 end_of_comment_or_eof =
       possible_start_of_comment + num_bytes_to_skip_from_start_of_comment;
 
-    if (file_read_at_end(tokens->f, end_of_comment_or_eof)) {
+    if (file_at_end(tokens->f, end_of_comment_or_eof)) {
       token_build(tokens,
                   TOKEN_ERROR,
                   possible_start_of_comment,
@@ -172,13 +172,13 @@ u32 tokenize_string_literal(Tokens *tokens, u32 start_of_token_index) {
   u32 current_index = start_of_token_index;
   i8 current_byte;
   // I know, I just wanna stress my compiler compiling itself.
-  while ((current_byte = file_read_byte_or_eof(tokens->f, ++current_index)) != CC_END_OF_FILE_CHAR) {
+  while ((current_byte = file_read_byte_or_eof(tokens->f, ++current_index)) != END_OF_FILE_CHAR) {
     if (current_byte == '\"') break;
     // TODO: simple and numeric escape sequences
   }
 
   u32 token_length;
-  if (current_byte == CC_END_OF_FILE_CHAR) {
+  if (current_byte == END_OF_FILE_CHAR) {
     token_length = current_index - start_of_token_index;
     token_build(tokens, TOKEN_ERROR, start_of_token_index, token_length,
                 "tokenize_string_literal(): Reached early eof when reading a string literal.");
