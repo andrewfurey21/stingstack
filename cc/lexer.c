@@ -123,7 +123,7 @@ u32 skip_if_comment(Tokens *tokens, u32 possible_start_of_comment) {
     num_bytes_to_skip_from_start_of_comment =
       num_bytes_until_matching_byte_or_eof(tokens->f,
                                            possible_start_of_comment,
-                                           CC_NEW_LINE_CHAR);
+                                           '\n');
     const u32 end_of_comment_or_eof =
       possible_start_of_comment + num_bytes_to_skip_from_start_of_comment;
     if (!file_at_end(tokens->f, end_of_comment_or_eof)) {

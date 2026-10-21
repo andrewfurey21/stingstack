@@ -1,7 +1,9 @@
 #ifndef FILE_H
 #define FILE_H
 
-#include "utils.h"
+#include "typedefs.h"
+#include "debug.h"
+#include "os.h"
 
 /*
 
@@ -91,7 +93,7 @@ static inline i8 file_read_byte_or_eof(file *f, u32 byte_index) {
 
 static inline void file_close(file *f) {
   FILE_PANIC_IF_ERROR(f);
-  error_set(&f->err, NO_ERROR_YET, "File is closed.");
+  error_set(&f->err, FORBIDDEN, "File is closed.");
 }
 
 static inline b8 file_failed(file *f) {

@@ -1,5 +1,10 @@
-#include "utils.h"
 #include "file.h"
+
+/*
+
+Tools to help with lexing.
+
+*/
 
 static inline b8 is_whitespace(i8 byte) {
   return byte == '\t' || byte == '\n' || byte == '\v' ||

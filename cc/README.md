@@ -28,3 +28,4 @@
 - how hard is it to know if value is undefined? at compile time.
 - defer
 - default params
+- really nice inline assembly. maybe look at odin?

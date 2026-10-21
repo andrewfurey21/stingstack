@@ -2,8 +2,13 @@
 #ifndef CC_LEXER_H
 #define CC_LEXER_H
 
+/*
+
+C tokenizing.
+
+*/
+
 #include "../include/sting.h"
-#include "defines.h"
 
 enum TokenType: u8 {
 

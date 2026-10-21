@@ -1,7 +1,7 @@
-#include "../include/sting.h"  // TODO: add to search path
 
-#include "defines.h"
 #include "lexer.h"
+
+#define MAX_NUM_TOKENS 100
 
 int main(int argc, char **argv) {
 
@@ -13,21 +13,17 @@ int main(int argc, char **argv) {
     "examples/whitespace_and_comments3.c",
   };
 
-  const u32 memory_size = 128 KB;
+  const u32 memory_size = 4 KB;
   u8 memory[memory_size];
   Arena arena = arena_setup(memory, memory_size);
 
-
   void *file_buffer = arena_alloc(&arena, MAX_FILE_NUM_BYTES, 1);
-
   file f;
   file_setup(&f, file_buffer, MAX_FILE_NUM_BYTES, NULL);
 
-  void *token_buffer =
-    arena_alloc(&arena, CC_MAX_TOKEN_BUFFER_LENGTH * sizeof(Token), 1);
-
+  void *token_buffer = arena_alloc(&arena, MAX_NUM_TOKENS * sizeof(Token), 1);
   Tokens tokens = { 0 };
-  tokens_setup(&tokens, &f, token_buffer, CC_MAX_NUM_TOKENS);
+  tokens_setup(&tokens, &f, token_buffer, MAX_NUM_TOKENS);
 
   for (u32 i = 0; i < STATIC_ARRAY_LENGTH(compilation_unit_paths); i++) {
     printf("-------------------------------------\n");
