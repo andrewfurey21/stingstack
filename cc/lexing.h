@@ -1,4 +1,4 @@
-#include "utils.h"
+#include "../utils/utils.h"
 #include "file.h"
 
 b8 is_whitespace(i8 byte);

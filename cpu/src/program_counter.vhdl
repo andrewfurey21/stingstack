@@ -4,13 +4,13 @@ use ieee.numeric_std.all;
 
 entity program_counter is
   generic (
-    WIDTH : integer
+    WIDTH : integer := 32
   );
   port (
     clk    : in std_logic;
     rst    : in std_logic;
     pc_next: in std_logic_vector(WIDTH - 1 downto 0);
-    stalled: in std_logic;
+
     pc     : out std_logic_vector(WIDTH - 1 downto 0)
   );
 end entity program_counter;
@@ -25,11 +25,7 @@ begin
       if rst = '1' then
         pc <= (others => '0');
       else
-
-        if stalled = '0' then
-          pc <= pc_next;
-        end if;
-
+        pc <= pc_next;
       end if;
 
     end if;

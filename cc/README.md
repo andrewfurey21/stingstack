@@ -8,6 +8,7 @@
 - 8cc
 - booth
 - cuik
+- https://codeberg.org/thesalt/lance
 
 ## things to look into
 
@@ -20,7 +21,9 @@
 
 ## features I would add
 
-- f strings would be handy.
-- namespaces
-- zig comptime or similar for some sort of generic support
-- methods, but just syntax sugar maybe. idk.
+- `#run func_call()`, like jai, convert to bytecode and run at compile time.
+- methods
+- simple stack trace in debug mode with a static error object.
+- enum class, but type inferred too. like .VALUE
+- how hard is it to know if value is undefined? at compile time.
+- defer

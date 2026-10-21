@@ -1,4 +1,6 @@
-# frasm: fast risc-v assembler
+# risc-v assembler
+
+this should just be assembler.c. might include from utils/lexer
 
 ## links
 

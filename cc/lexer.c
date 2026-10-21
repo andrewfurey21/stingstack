@@ -1,6 +1,6 @@
 #include "lexer.h"
 #include "file.h"
-#include "utils.h"
+#include "../utils/utils.h"
 
 void tokens_setup(Tokens *tokens, file_read *f, void *buffer, u32 capacity) {
   tokens->tokens = buffer;
@@ -10,7 +10,7 @@ void tokens_setup(Tokens *tokens, file_read *f, void *buffer, u32 capacity) {
   tokens->location.column = 0;
   tokens->capacity = capacity;
 
-  error_set(&tokens->tokenizing_error, NULL, NO_ERROR_YET);
+  error_set(&tokens->tokenizing_error, NO_ERROR_YET, NULL);
 }
 
 void token_build(Tokens *tokens,
@@ -43,7 +43,7 @@ void token_build(Tokens *tokens,
 void tokenize(Tokens *tokens) {
 
   if (file_read_failed(tokens->f)) {
-    error_set(&tokens->tokenizing_error, "tokenize(): File read failed.", FAILED);
+    error_set(&tokens->tokenizing_error, FAILED, "tokenize(): File read failed.");
     return;
   }
 
@@ -84,7 +84,7 @@ void tokenize(Tokens *tokens) {
   NOTE("End location line: %d, column: %d.",
        tokens->location.line, tokens->location.column);
 
-  error_set(&tokens->tokenizing_error, NULL, SUCCESS);
+  error_set(&tokens->tokenizing_error, SUCCESS, NULL);
 }
 
 
@@ -98,7 +98,7 @@ u32 skip_whitespace(file_read *f, file_location *location, u32 start_of_whitespa
            "Cannot skip byte 0x%x since it is not whitespace.", whitespace, whitespace);
 
   while (is_whitespace(whitespace)) {
-    if (is_new_line(whitespace)) file_location_add_new_line(location);
+    if (whitespace == '\n') file_location_add_new_line(location);
     whitespace_in_bytes++;
     whitespace = file_read_byte_or_eof(f, start_of_whitespace + whitespace_in_bytes);
   }
@@ -179,7 +179,7 @@ u32 tokenize_string_literal(Tokens *tokens, u32 start_of_token_index) {
 
   u32 token_length;
   if (current_byte == CC_END_OF_FILE_CHAR) {
-    current_index - start_of_token_index;
+    token_length = current_index - start_of_token_index;
     token_build(tokens, TOKEN_ERROR, start_of_token_index, token_length,
                 "tokenize_string_literal(): Reached early eof when reading a string literal.");
 

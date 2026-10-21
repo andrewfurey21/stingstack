@@ -1,5 +1,6 @@
+#include "../utils/utils.h"
 
-#include "utils.h"
+#include "defines.h"
 #include "alloc.h"
 #include "file.h"
 #include "lexer.h"
@@ -20,11 +21,11 @@ int main(int argc, char **argv) {
 
   void *file_buffer =
     global_arena_aligned_alloc(&global_arena,
-                               CC_MAX_FILE_NUM_BYTES * sizeof(i8),
+                               MAX_FILE_NUM_BYTES * sizeof(i8),
                                alignof(i8));
 
   file_read f = { 0 };
-  file_read_setup_memory(&f, file_buffer, CC_MAX_FILE_NUM_BYTES);
+  file_read_setup_memory(&f, file_buffer, MAX_FILE_NUM_BYTES);
 
   void *token_buffer =
     global_arena_aligned_alloc(&global_arena,

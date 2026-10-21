@@ -1,7 +1,8 @@
 #ifndef CC_ALLOC_H
 #define CC_ALLOC_H
 
-#include "utils.h"
+#include "defines.h"
+#include "../utils/utils.h"
 
 // There should only be 1 global arena.
 typedef struct {
