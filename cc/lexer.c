@@ -1,6 +1,4 @@
 #include "lexer.h"
-#include "defines.h"
-#include "../utils/utils.h"
 
 void tokens_setup(Tokens *tokens, file *f, void *buffer, u32 capacity) {
   tokens->tokens = buffer;
@@ -47,7 +45,7 @@ void tokenize(Tokens *tokens) {
     return;
   }
 
-  u64 byte_index = 0;
+  u32 byte_index = 0;
   for (u32 token_num_bytes = 0; byte_index < tokens->f->bytes_used;
        byte_index += token_num_bytes) {
 

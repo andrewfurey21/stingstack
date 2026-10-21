@@ -27,3 +27,4 @@
 - enum class, but type inferred too. like .VALUE
 - how hard is it to know if value is undefined? at compile time.
 - defer
+- default params

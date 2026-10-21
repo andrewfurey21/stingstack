@@ -1,8 +1,6 @@
-#include "../utils/utils.h"  // TODO: make a sting.h that has all utils these included.
-#include "../utils/file.h"
+#include "../include/sting.h"  // TODO: add to search path
 
 #include "defines.h"
-#include "alloc.h"
 #include "lexer.h"
 
 int main(int argc, char **argv) {
@@ -15,23 +13,18 @@ int main(int argc, char **argv) {
     "examples/whitespace_and_comments3.c",
   };
 
-  GlobalArena global_arena;
-  global_arena_clear(&global_arena);
+  const u32 memory_size = 128 KB;
+  u8 memory[memory_size];
+  Arena arena = arena_setup(memory, memory_size);
 
 
-  void *file_buffer =
-    global_arena_aligned_alloc(&global_arena,
-                               MAX_FILE_NUM_BYTES * sizeof(i8),
-                               alignof(i8));
+  void *file_buffer = arena_alloc(&arena, MAX_FILE_NUM_BYTES, 1);
 
-  file f = { 0 };
+  file f;
   file_setup(&f, file_buffer, MAX_FILE_NUM_BYTES, NULL);
 
-  // TODO: remove this global arena shite. make a u8 buffer[length], pass to some arena struct.
   void *token_buffer =
-    global_arena_aligned_alloc(&global_arena,
-                               CC_MAX_TOKEN_BUFFER_LENGTH * sizeof(Token),
-                               alignof(i8));
+    arena_alloc(&arena, CC_MAX_TOKEN_BUFFER_LENGTH * sizeof(Token), 1);
 
   Tokens tokens = { 0 };
   tokens_setup(&tokens, &f, token_buffer, CC_MAX_NUM_TOKENS);
