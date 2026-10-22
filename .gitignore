@@ -1,3 +1,5 @@
 **/*.o
 cc/acc
 **/build/*
+asm/asm
+
