@@ -28,7 +28,8 @@ static inline void panic_or_note_if(const b8 expr,
                                     const u32 line,
                                     const char *fmt, ...) {
 
-#ifdef DEBUG
+// TODO: some panics need to stay in release, some don't. distinguish these.
+// #ifdef DEBUG
   va_list args;
   va_start(args, fmt);
   if (expr) {
@@ -47,7 +48,7 @@ static inline void panic_or_note_if(const b8 expr,
     }
   }
   va_end(args);
-#endif
+// #endif
 
 }
 

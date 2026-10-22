@@ -1,5 +1,5 @@
 all:
-	gcc main.c -o asm
+	gcc main.c -o asm -g -O0
 
 clean:
 	rm asm

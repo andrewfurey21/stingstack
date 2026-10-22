@@ -25,7 +25,9 @@
 - methods
 - simple stack trace in debug mode with a static error object.
 - enum class, but type inferred too. like .VALUE
-- how hard is it to know if value is undefined? at compile time.
+- how hard is it to know if value is undefined? at compile time, or force mark as undefined like zig?
 - defer
 - default params
 - really nice inline assembly. maybe look at odin?
+- int x = x in a lower scope should be banned.
+- whats a nice way to printf with compile time type checking and customizeable based on the struct.

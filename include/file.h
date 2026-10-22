@@ -13,7 +13,7 @@ File reading/writing
 
 struct file {
   const char *path;
-        u8   *data;
+        i8   *data;
 
   u32 bytes_reserved;
   u32 bytes_used;
@@ -29,7 +29,7 @@ typedef struct file file;
           (f->path == NULL ? "text/memory" : f->path), \
           f->err.message);
 
-static inline file file_setup(u8 *buffer, u32 bytes_reserved, const char* path) {
+static inline file file_setup(i8 *buffer, u32 bytes_reserved, const char* path) {
   return (file) {
     .path = path,
     .data = buffer,

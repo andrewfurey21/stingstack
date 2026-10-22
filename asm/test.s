@@ -1,39 +1,35 @@
 # This should parse correctly.
-        addi x0, x0, 0 # hello
-_label0:
-        addi x1, x0, 1
-        addi x2, x1, 2
-        addi x3, x2, 3
-        addi x4, x3, 4
-        addi x5, x4, 5
-        addi x6, x5, 6
-        addi x7, x6, 7
+        addi x0, zero, 1 ; addi x1, x1, 0x2
+_label0:addi x1, ra, 0x00;
+        addi x2, sp, 0x40
+        addi x3, gp, 5;
+        addi x4, tp, 6
+        addi x5, t0, 7;
+x31:
 l_abel1:
-        addi x8, x7, 8
-        addi x9, x8, 9
-        addi x10, x9, -1
-        addi x11, x10, -2
-        addi x12, x11, -3
-        addi x13, x12, -4 # this is another comment
-        addi x14, x13, -5
-        addi x15, x14, -6
-        addi x16, x15, -7
+        addi x6, t1, 8;
+        addi x7, t2, 9
+        addi x8, s0, -1;
+        addi x8, fp, -1;
+        addi x9, s1, -2
+        addi x10, a0, -3;
+        addi x11, a1, -4 # this is another comment
+        addi x12, a2, -5
+        addi x13, a3, -6;
+        addi x14, a4, 0x7fF;
   # another comment
-        addi x17, x16, -8
-addi:
-        addi x18, x17, -9
-        addi x19, x18, -10
-        addi x20, x19, -11
-        addi x21, x20, 10 # this is some comment
-        addi x22, x21, 100
-        addi x23, x22, 1000
-        addi x24, x23, -1000
-        addi x25, x24, -100
+        addi x15, a5, -8; addi:
+        addi x16, a6, -9
+        addi x17, a7, -10;addi x18, s2, -11
+        addi x19, s3, 10 # this is some comment
+        addi x20, s4, 2047
+        addi x21, s5, -2048; addi x22, s6, -100
 label3_: # last comment
-        addi x26, x25, -10
-        addi x27, x26, -1
-        addi x28, x27, 1
-        addi x29, x28, 2
-        addi x30, x29, 3
-label4:
-        addi x31, x30, 4
+        addi x23, s7, -10;
+        addi x24, s8, -1
+        addi x25, s9, 1;
+        addi x26, s10, 2;
+label4:  addi x27, s11, 3 ;addi x28, t3, 4;
+        addi x29, t4, 4
+        addi x30, t5, 4;
+        addi x31, t6, 4

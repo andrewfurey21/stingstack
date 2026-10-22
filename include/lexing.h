@@ -1,3 +1,6 @@
+#ifndef LEXING_H
+#define LEXING_H
+
 #include "file.h"
 
 /*
@@ -10,6 +13,12 @@ static inline b8 is_whitespace(i8 byte) {
   return byte == '\t' || byte == '\n' || byte == '\v' ||
          byte == '\f' || byte == '\r' || byte == ' ';
 }
+
+static inline b8 is_non_newline_whitespace(i8 byte) {
+  // Compiler should be able to optimize this.
+  return is_whitespace(byte) && (byte != '\n');
+}
+
 
 static inline b8 is_number(i8 byte) {
   return (byte >= '0' && byte <= '9');
@@ -24,7 +33,7 @@ static inline b8 is_floating_point_suffix(i8 byte) {
 }
 
 static inline b8 is_hexadecimal(i8 byte) {
-  return (byte >= '0' && byte <= '9') ||
+  return is_number(byte) ||
          (byte >= 'a' && byte <= 'f') ||
          (byte >= 'A' && byte <= 'F');
 }
@@ -58,7 +67,8 @@ static inline u32 skip_whitespace(file *f, file_location *location, u32 start_of
   i8 whitespace = file_read_byte(f, start_of_whitespace);
 
   PANIC_IF(!is_whitespace(whitespace),
-           "Cannot skip byte 0x%x since it is not whitespace.", whitespace, whitespace);
+           "Cannot skip byte 0x%x since it is not whitespace.",
+           whitespace);
 
   while (is_whitespace(whitespace)) {
     if (whitespace == '\n') file_location_add_new_line(location);
@@ -69,6 +79,25 @@ static inline u32 skip_whitespace(file *f, file_location *location, u32 start_of
   RETURN_VAL(whitespace_in_bytes);
 }
 
+// Identical to above. Use fnptrs?
+static inline u32 skip_non_newline_whitespace(file *f, file_location *location, u32 start_of_whitespace) {
+  CALL;
+
+  u32 whitespace_in_bytes = 0;
+  i8 whitespace = file_read_byte(f, start_of_whitespace);
+
+  PANIC_IF(!is_non_newline_whitespace(whitespace),
+           "Cannot skip byte 0x%x since it is not whitespace.",
+           whitespace);
+
+  while (is_non_newline_whitespace(whitespace)) {
+    if (whitespace == '\n') file_location_add_new_line(location);
+    whitespace_in_bytes++;
+    whitespace = file_read_byte_or_eof(f, start_of_whitespace + whitespace_in_bytes);
+  }
+
+  RETURN_VAL(whitespace_in_bytes);
+}
 
 static inline b8 match_next_bytes(file *f, u32 start_of_token_in_file, const char *match_string) {
   CALL;
@@ -141,3 +170,4 @@ static inline u32 num_bytes_until_end_of_substring_or_eof
   }
 }
 
+#endif
