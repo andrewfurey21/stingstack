@@ -11,10 +11,6 @@ static inline b8 is_whitespace(i8 byte) {
          byte == '\f' || byte == '\r' || byte == ' ';
 }
 
-static inline b8 is_start_of_comment(i8 byte) {
-  return byte == '/';
-}
-
 static inline b8 is_number(i8 byte) {
   return (byte >= '0' && byte <= '9');
 }
@@ -54,6 +50,25 @@ static inline b8 match_next_byte(file *f, u32 start_of_token_in_file, char match
 
   RETURN_VAL(next_byte == match);
 }
+
+static inline u32 skip_whitespace(file *f, file_location *location, u32 start_of_whitespace) {
+  CALL;
+
+  u32 whitespace_in_bytes = 0;
+  i8 whitespace = file_read_byte(f, start_of_whitespace);
+
+  PANIC_IF(!is_whitespace(whitespace),
+           "Cannot skip byte 0x%x since it is not whitespace.", whitespace, whitespace);
+
+  while (is_whitespace(whitespace)) {
+    if (whitespace == '\n') file_location_add_new_line(location);
+    whitespace_in_bytes++;
+    whitespace = file_read_byte_or_eof(f, start_of_whitespace + whitespace_in_bytes);
+  }
+
+  RETURN_VAL(whitespace_in_bytes);
+}
+
 
 static inline b8 match_next_bytes(file *f, u32 start_of_token_in_file, const char *match_string) {
   CALL;

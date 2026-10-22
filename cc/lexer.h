@@ -148,6 +148,7 @@ void token_build(Tokens *tokens,
                  const char *error_msg);
 
 // Token generation
+b8 is_start_of_c_comment(i8 byte);
 u32 skip_whitespace(file *f, file_location *location, u32 start_of_whitespace);
 u32 skip_if_comment(Tokens *tokens, u32 possible_start_of_comment);
 u32 tokenize_string_literal(Tokens *tokens, u32 start_of_token_index);

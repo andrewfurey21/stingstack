@@ -29,12 +29,18 @@ typedef struct file file;
           (f->path == NULL ? "text/memory" : f->path), \
           f->err.message);
 
-static inline void file_setup(file *f, u8 *buffer, u32 bytes_reserved, const char* path) {
-  f->data = buffer;
-  f->path = path;
-  f->bytes_reserved = bytes_reserved;
-  f->bytes_used = 0;
-  error_set(&f->err, NO_ERROR_YET, NULL);
+static inline file file_setup(u8 *buffer, u32 bytes_reserved, const char* path) {
+  return (file) {
+    .path = path,
+    .data = buffer,
+    .bytes_reserved = bytes_reserved,
+    .bytes_used = 0,
+
+    .err = (error) {
+      .message = NULL,
+      .type = NO_ERROR_YET,
+    }
+  };
 }
 
 static inline void file_change_path(file *f, const char *path) {

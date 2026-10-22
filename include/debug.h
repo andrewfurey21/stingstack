@@ -4,17 +4,17 @@
 #define DEBUG 1
 #define DEBUG_BYTE_VALUE 0xDB
 #define DEBUG_PTR_VALUE NULL
-#define STACK_DEPTH 10
-
 
 #include "includes.h"
 #include "defines.h"
 #include "typedefs.h"
 
+#define STACK_DEPTH 10
+
 struct Call_Stack {
-  u32 depth;
   const char *function_names[STACK_DEPTH];
   u32 lines[STACK_DEPTH];
+  u32 depth;
 };
 
 #ifdef DEBUG
@@ -64,24 +64,16 @@ static inline void panic_or_note_if(const b8 expr,
   panic_or_note_if(true, false, __FILE__, __func__, __LINE__, fmt, ##__VA_ARGS__, NULL)
 
 #define debug_clear_array(memory, size)    \
-  do {                                     \
     if (DEBUG) {                           \
       const u32 s_ = (size);               \
       for (u32 di_ = 0; di_ < s_; di_++) { \
         (memory)[di_] = DEBUG_BYTE_VALUE;  \
       }                                    \
-    }                                      \
-  } while (0)
+    }
 
 typedef enum {
   SUCCESS, FAILED, NO_ERROR_YET, FORBIDDEN
 } error_type;
-
-typedef struct {
-  // TODO: make this a format_string or something. string_builder
-  const char *message;
-  error_type type;
-} error;
 
 static inline void call_or_return(const char *name, u32 line, b8 call) {
   PANIC_IF(call_stack.depth >= STACK_DEPTH, "Call stack too deep.");
@@ -103,15 +95,19 @@ static inline void call_or_return(const char *name, u32 line, b8 call) {
 #define RETURN(x) return (x)
 #endif
 
-// TODO: message should be some sort of formatting string
+typedef struct {
+  // TODO: make this a format_string or something. string_builder
+  const char *message;
+  error_type type;
+} error;
+
+
 static inline void error_set(error *e, error_type type, const char *message) {
   CALL;
   e->message = message;
   e->type = type;
   RETURN;
 }
-
-
 
 #endif
 

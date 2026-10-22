@@ -36,7 +36,6 @@ static inline void *arena_alloc(Arena *arena, u32 num_bytes, u32 alignment) {
            "Could not make allocation at %d of size %d when only reserved %d.",
            arena->bytes_used, num_bytes, arena->bytes_reserved);
 
-  // Assumes alignment requirement is less then 2^32
   const u32 address     = (u32)(uptr)(arena->memory + arena->bytes_used);
   const b8  is_aligned  = !!(address & (alignment - 1));
   const u32 extra_bytes = (alignment - address & (alignment - 1));

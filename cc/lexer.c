@@ -50,31 +50,31 @@ void tokenize(Tokens *tokens) {
   }
 
   u32 byte_index = 0;
-  for (u32 token_num_bytes = 0; byte_index < tokens->f->bytes_used;
-       byte_index += token_num_bytes) {
+  for (u32 token_length = 0; byte_index < tokens->f->bytes_used;
+       byte_index += token_length) {
 
-    // consume everything needed. byte_index + token_num_bytes should produce a byte not read yet.
-    token_num_bytes = 0;
+    // consume everything needed. byte_index + token_length should produce a byte not read yet.
+    token_length = 0;
     const i8 byte = file_read_byte(tokens->f, byte_index);
 
     if (is_whitespace(byte)) {
-      token_num_bytes =
+      token_length =
         skip_whitespace(tokens->f, &tokens->location, byte_index);
       continue;
     }
 
-    if (is_start_of_comment(byte)) {
-      token_num_bytes = skip_if_comment(tokens, byte_index);
-      if (token_num_bytes > 0) continue;
+    if (is_start_of_c_comment(byte)) {
+      token_length = skip_if_comment(tokens, byte_index);
+      if (token_length > 0) continue;
     }
 
     if (is_c_string_literal_related(byte)) {
-      token_num_bytes = tokenize_string_literal(tokens, byte_index);
-      if (token_num_bytes > 0) continue; // TODO: check this returns correctly.
+      token_length = tokenize_string_literal(tokens, byte_index);
+      if (token_length > 0) continue; // TODO: check this returns correctly.
     }
 
     token_build(tokens, TOKEN_ERROR, byte_index, 1, "Unknown token.");
-    token_num_bytes = 1;
+    token_length = 1;
   }
 
   PANIC_IF(byte_index != tokens->f->bytes_used,
@@ -94,22 +94,8 @@ void tokenize(Tokens *tokens) {
 
 // Each token generation function has to return the number of bytes it consumed
 
-u32 skip_whitespace(file *f, file_location *location, u32 start_of_whitespace) {
-  CALL;
-
-  u32 whitespace_in_bytes = 0;
-  i8 whitespace = file_read_byte(f, start_of_whitespace);
-
-  PANIC_IF(!is_whitespace(whitespace),
-           "Cannot skip byte 0x%x since it is not whitespace.", whitespace, whitespace);
-
-  while (is_whitespace(whitespace)) {
-    if (whitespace == '\n') file_location_add_new_line(location);
-    whitespace_in_bytes++;
-    whitespace = file_read_byte_or_eof(f, start_of_whitespace + whitespace_in_bytes);
-  }
-
-  RETURN_VAL(whitespace_in_bytes);
+b8 is_start_of_c_comment(i8 byte) {
+  return byte == '/';
 }
 
 u32 skip_if_comment(Tokens *tokens, u32 possible_start_of_comment) {
@@ -180,7 +166,6 @@ u32 tokenize_string_literal(Tokens *tokens, u32 start_of_token_index) {
 
   u32 current_index = start_of_token_index;
   i8 current_byte;
-  // I know, I just wanna stress my compiler compiling itself.
   while ((current_byte = file_read_byte_or_eof(tokens->f, ++current_index)) != END_OF_FILE_CHAR) {
     if (current_byte == '\"') break;
     // TODO: simple and numeric escape sequences
@@ -202,6 +187,7 @@ u32 tokenize_string_literal(Tokens *tokens, u32 start_of_token_index) {
   RETURN_VAL(token_length);
 }
 
+// TODO: Maybe should just bail on the first error.
 u32 tokens_display_errors(Tokens *tokens) {
   if (tokens->tokenizing_error.type == FAILED) {
     NOTE("A problem occurred when tokenizing: %s",

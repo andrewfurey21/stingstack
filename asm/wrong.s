@@ -1,31 +1,6 @@
 
-        addi x0, x0, 0
+        addi  x0,  x0, 0
 label0:
-        addi x1, x0, 1
-        addi x2, x1, 2
-        addi x3, x2, 3
-        addi x4, x3, 4
-        addi x5, x4, 5
-        addi x6, x5, 6
-        addi x7, x6, 7
-        addi x8, x7, 8
-        addi x9, x8, 9
-        addi x10, x9, -1
-        addi x11, x10, -2
-        addi x12, x11, -3
-        addi x13, x12, -4
-        addi x14, x13, -5
-        addi x15, x14, -6
-        addi x16, x15, -7
-        addi x17, x16, -8
-        addi x18, x17, -9
-        addi x19, x18, -10
-        addi x20, x19, -11
-        addi x21, x20, 10
-        addi x22, x21, 100
-        addi x23, x22, 1000
-        addi x24, x23, -1000
-        addi x25, x24, 100
         addi x26, x25, 1000000
         addi x27, x26, 10000000
         addi x28, x27, 100000000

@@ -9,7 +9,7 @@ int main(int argc, char **argv) {
     "examples/empty.c",
     "examples/whitespace_and_comments.c",
     "examples/whitespace_and_comments2.c",
-    "shouldn't work",
+    "file that does not exist",
     "examples/whitespace_and_comments3.c",
   };
 
@@ -32,7 +32,11 @@ int main(int argc, char **argv) {
     file_change_path(&f, compilation_unit_paths[i]);
     file_read_into_memory(&f);
 
-    if (file_failed(&f)) { file_display_error(&f); continue; }
+    if (file_failed(&f)) {
+      file_display_error(&f);
+      file_close(&f);
+      continue;
+    }
 
     tokenize(&tokens);
     const b8 num_token_errors = tokens_display_errors(&tokens);
