@@ -9,6 +9,7 @@ rv32i assembler.
 
 TODO
 
+- Add fp register
 - Adversarial tests
 - Add a couple more instructions
 - Generate binary
@@ -36,7 +37,7 @@ const char *registers[32] = {
   "t0",
   "t1",
   "t2",
-  "s0", // TODO: 8 need to also check for fp
+  "s0",
   "s1",
   "a0",
   "a1",
@@ -68,6 +69,10 @@ i8 match_register(i8 *str, u32 length) {
   for (i8 i = 0; i < STATIC_ARRAY_LENGTH(registers); i++) {
     if (length != string_length(registers[i])) continue;
     if (string_equal(registers[i], str, length)) {
+      return i;
+    }
+
+    if (i == 8 && string_equal("fp", str, length)) {
       return i;
     }
   }
