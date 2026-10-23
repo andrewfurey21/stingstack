@@ -9,12 +9,10 @@ rv32i assembler.
 
 TODO
 
-- Fix no newline bug
-- Double check locations
 - Adversarial tests
 - Add a couple more instructions
 - Generate binary
-- Test on qemu
+- Tests on qemu
 - Add rest of rv32i
 
 */
@@ -139,7 +137,7 @@ Tokens tokens_setup(void *memory, u32 bytes_reserved) {
     .tokens_reserved = bytes_reserved / sizeof(Token),
     .tokens_used = 0,
     .location.line = 1,
-    .location.column = 0,
+    .location.column = 1,
   };
 }
 
@@ -149,6 +147,7 @@ u32 tokens_append(file *f, Tokens *tokens, Token t) {
            "Trying to append new token when reserved %d tokens, but used %d already.",
            tokens->tokens_reserved, tokens->tokens_used);
   tokens->tokens[tokens->tokens_used] = t;
+  tokens->tokens[tokens->tokens_used].location = tokens->location;
   tokens->tokens_used++;
 
   file_location_move_until(&tokens->location, f, t.file_index, t.bytes_used);
@@ -163,7 +162,7 @@ b8 is_alpha(u8 byte) {
   return (byte >= 'A' && byte <= 'Z') || (byte >= 'a' && byte <= 'z');
 }
 
-Token tokenize_number(file *f, file_location *location, u32 byte_index) {
+Token tokenize_number(file *f, u32 byte_index) {
   CALL;
   const u32 start_index = byte_index;
   i8 byte = file_read_byte(f, byte_index);
@@ -171,7 +170,6 @@ Token tokenize_number(file *f, file_location *location, u32 byte_index) {
   Token t = {
     .type = INTEGER_LITERAL,
     .info = 0,
-    .location = *location,
     .file_index = byte_index,
     .bytes_used = 0,
   };
@@ -216,9 +214,8 @@ Token tokenize_number(file *f, file_location *location, u32 byte_index) {
 
   }
   t.info.integer_literal = number * sign; // probably theres a cool trick for this. would also be cool if compiler could figure it out.
-  t.bytes_used = byte_index - start_index + 1; // TODO: check this.
+  t.bytes_used = byte_index - start_index; // TODO: check this.
 
-  file_location_move_until(location, f, start_index, t.bytes_used);
   RETURN_VAL(t);
 }
 
@@ -226,7 +223,7 @@ b8 is_inst_or_reg_or_label(i8 byte) {
   return is_alpha(byte) || is_number(byte) || byte == '_';
 }
 
-Token tokenize_inst_or_reg_or_label(file *f, file_location *location, u32 byte_index) {
+Token tokenize_inst_or_reg_or_label(file *f, u32 byte_index) {
   CALL;
   const u32 start_index = byte_index;
   const i8 first_byte = file_read_byte(f, byte_index);
@@ -234,7 +231,6 @@ Token tokenize_inst_or_reg_or_label(file *f, file_location *location, u32 byte_i
   Token t = {
     .type = UNKNOWN,
     .info = 0,
-    .location = *location,
     .file_index = byte_index,
     .bytes_used = 0
   };
@@ -286,7 +282,6 @@ Token tokenize_inst_or_reg_or_label(file *f, file_location *location, u32 byte_i
   }
 
   t.bytes_used = length;
-  file_location_move_until(location, f, start_index, t.bytes_used);
   RETURN_VAL(t);
 }
 
@@ -333,20 +328,21 @@ void tokenize(file *f, Tokens *tokens) {
     token_length = 0;
     i8 byte = file_read_byte(f, byte_index);
 
-    if (is_non_newline_whitespace(byte)) {
-      token_length =
-        skip_non_newline_whitespace(f, &tokens->location, byte_index);
-    } else if (is_asm_comment(byte)) {
-      token_length =
-        num_bytes_until_matching_byte_or_eof(f, byte_index, '\n');
-      file_location_add_new_line(&tokens->location);
-    } else if (byte == '\n') {
+    if (byte == '\n') {
       Token newline = {
         .bytes_used = 1,
         .file_index = byte_index,
         .type = NEWLINE,
       };
       token_length = tokens_append(f, tokens, newline);
+    }
+    else if (is_non_newline_whitespace(byte)) {
+      token_length =
+        skip_non_newline_whitespace(f, &tokens->location, byte_index);
+    } else if (is_asm_comment(byte)) {
+      token_length =
+        num_bytes_until_matching_byte_or_eof(f, byte_index, '\n');
+      file_location_move_until(&tokens->location, f, byte_index, token_length);
     } else if (byte == ':') {
       Token colon = {
         .bytes_used = 1,
@@ -363,21 +359,18 @@ void tokenize(file *f, Tokens *tokens) {
       token_length = tokens_append(f, tokens, semicolon);
     } else if (is_alpha(byte) || byte == '_') {
       token_length =
-        tokens_append(f, tokens, tokenize_inst_or_reg_or_label(f, &tokens->location, byte_index));
+        tokens_append(f, tokens, tokenize_inst_or_reg_or_label(f, byte_index));
     } else if (is_number(byte) || byte == '-') {
       token_length =
-        tokens_append(f, tokens, tokenize_number(f, &tokens->location, byte_index));
+        tokens_append(f, tokens, tokenize_number(f, byte_index));
     } else if (byte == ',') {
       Token comma = {
         .type = COMMA,
-        .info = 0,
-        .location = tokens->location,
         .file_index = byte_index,
         .bytes_used = 1,
       };
 
       token_length = tokens_append(f, tokens, comma);
-      file_location_next_column(&tokens->location);
     }
 
     // TODO: Should be an error regardless of debug.
@@ -400,8 +393,8 @@ i32 main(i32 num_args, char **args) {
 
   // NOTE: Could calibrate these at runtime, and use a vla.
   const u32 memory_size = 32 KB;
-  const u32 file_size   =  1 KB;
-  const u32 tokens_size =  6 KB;
+  const u32 file_size   =  2 KB;
+  const u32 tokens_size =  8 KB;
   u8 memory[memory_size];
 
   Arena arena = arena_setup(memory, memory_size);
@@ -423,6 +416,7 @@ i32 main(i32 num_args, char **args) {
 
     tokenize(&f, &tokens);
 
+    printf("Num Tokens: %d\n", tokens.tokens_used);
     for (u32 i = 0; i < tokens.tokens_used; i++) {
       token_display(&f, &tokens.tokens[i]);
     }

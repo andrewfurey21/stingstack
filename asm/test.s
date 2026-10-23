@@ -5,7 +5,6 @@ _label0:addi x1, ra, 0x00;
         addi x3, gp, 5;
         addi x4, tp, 6
         addi x5, t0, 7;
-x31:
 l_abel1:
         addi x6, t1, 8;
         addi x7, t2, 9
