@@ -7,14 +7,20 @@ rv32i assembler.
 
 /*
 
-TODO
+TODO:
 
-- Add fp register
-- Adversarial tests
-- Add a couple more instructions
-- Generate binary
-- Tests on qemu
+- parse and generate the binary
+- testing to catch parsing errors, binary errors.
 - Add rest of rv32i
+
+*/
+
+/*
+
+ERRORS:
+
+- Labels with the same name.
+- 0x parses as hexadecimal 0.
 
 */
 
@@ -23,12 +29,15 @@ TODO
 // TODO: perfect hash function generator. These should be generated.
 // https://www.corsix.org/content/using-a-lookup-table-to-correct-an-approximation
 #define MAX_INSTRUCTION_LEN 4
+#define NUM_INSTRUCTIONS 1
+#define MAX_REGISTER_LEN 4
+#define MAX_NUM_LABELS 10
+
 const char *instructions[] = {
   "addi",
 };
 
-#define MAX_REGISTER_LEN 4
-const char *registers[32] = {
+const char *integer_registers[32] = {
   "zero",
   "ra",
   "sp",
@@ -64,11 +73,11 @@ const char *registers[32] = {
 };
 
 i8 match_register(i8 *str, u32 length) {
-  PANIC_IF(STATIC_ARRAY_LENGTH(registers) > 255, "Too many registers.");
+  PANIC_IF(STATIC_ARRAY_LENGTH(integer_registers) > 255, "Too many registers.");
 
-  for (i8 i = 0; i < STATIC_ARRAY_LENGTH(registers); i++) {
-    if (length != string_length(registers[i])) continue;
-    if (string_equal(registers[i], str, length)) {
+  for (i8 i = 0; i < STATIC_ARRAY_LENGTH(integer_registers); i++) {
+    if (length != string_length(integer_registers[i])) continue;
+    if (string_equal(integer_registers[i], str, length)) {
       return i;
     }
 
@@ -95,23 +104,27 @@ i8 match_inst(i8 *str, u32 length) {
 
 //
 
-#define NUM_INSTRUCTIONS 1
-enum Token_Type {
+enum Token_Type : u32 {
   ADDI = 0,
 
   REGISTER,
   INTEGER_LITERAL,
-  COMMA,
   LABEL,
+
+  COMMA,
+  COLON,
   NEWLINE,
   SEMICOLON,
-  COLON,
+  LEFT_BRACE,
+  RIGHT_BRACE,
+
   UNKNOWN,
 };
 
 union Token_Info {
   u32 register_index;
   i32 integer_literal;
+  u32 label_index;
 };
 
 struct Token {
@@ -323,6 +336,13 @@ void token_display(file *f, Token *t) {
   printf(" --- Location: line %d column %d\n", t->location.line, t->location.column);
 }
 
+void tokens_display(file *f, Tokens *tokens) {
+  printf("Num Tokens: %d\n", tokens->tokens_used);
+  for (u32 i = 0; i < tokens->tokens_used; i++) {
+    token_display(f, &tokens->tokens[i]);
+  }
+}
+
 void tokenize(file *f, Tokens *tokens) {
   CALL;
   tokens->tokens_used = 0;
@@ -340,8 +360,15 @@ void tokenize(file *f, Tokens *tokens) {
         .type = NEWLINE,
       };
       token_length = tokens_append(f, tokens, newline);
-    }
-    else if (is_non_newline_whitespace(byte)) {
+    } else if(byte == '(' || byte == ')') {
+      Token newline = {
+        .bytes_used = 1,
+        .file_index = byte_index,
+        .type = byte == '(' ? LEFT_BRACE : RIGHT_BRACE,
+      };
+      token_length = tokens_append(f, tokens, newline);
+
+    } else if (is_non_newline_whitespace(byte)) {
       token_length =
         skip_non_newline_whitespace(f, &tokens->location, byte_index);
     } else if (is_asm_comment(byte)) {
@@ -389,26 +416,128 @@ void tokenize(file *f, Tokens *tokens) {
   RETURN;
 }
 
+/*
+
+TODO:
+- implement label address setup + insert
+- how to maintain list of instructions that take a label?
+- fix argument, immediate, offset states in parser
+
+*/
+
+struct Label_Address {
+  u32 file_index;
+  u32 label_length;
+  u32 address;
+  b8 occupied;
+};
+
+struct Label_Addresses {
+  struct Label_Address *addresses;
+  u32 used;
+  u32 allocated; // TODO: use "allocated" instead of "reserved"?
+};
+
+typedef struct Label_Addresses Label_Addresses;
+
+void label_addresses_setup(void *memory) {
+
+}
+
+void label_address_insert(file *f, u32 file_index, u32 length, u32 address) {
+  // PANIC_IF (inserting an address that already exists. Not allowed in the assembly)
+}
+
+void parse_asm_and_generate_binary(file *f, file *b, Tokens *tokens) {
+
+  enum Parse_State {
+    STATEMENT, INSTRUCTION, LABEL_DEFINITION, ARGUMENT, OFFSET, IMMEDIATE, END_STATEMENT, WRITE
+  } state;
+
+  state = STATEMENT;
+
+  u32 instruction_counter = 0;
+
+  u32 token_skip, token = 0;
+  for (; token < tokens->tokens_used; token += token_skip) {
+    token_skip = 0;
+
+    switch (state) {
+      case STATEMENT: {
+        // PANIC_IF no tokens left, since that wouldn't make sense with the for loop above
+        // if label + colon: label_definition
+        // else instruction (no panic here.)
+      } break;
+
+      case LABEL_DEFINITION: {
+        // No panic, since label + colon was verified by statement case.
+        // Insert instruction counter + label info like file_index into label_addresses
+      } break;
+
+      case INSTRUCTION: {
+        // - [ADDI] len = NUM_INSTUCTIONS
+        // set instruction
+        // panic if not between
+        // then argument
+      } break;
+
+      case ARGUMENT: {
+        // - (register | imm | offset) & ( ; | \n )+
+        // - (register | imm | offset) & , & arg
+        // if not reg or imm or offset panic
+        // if reg
+        // if ; or \n: end_statement, else if , consume and Argument, else panic
+      } break;
+
+      case IMMEDIATE: {
+        // integer | label
+      } break;
+
+      case OFFSET: {
+        // integer & ( & register & )
+      } break;
+
+      case END_STATEMENT: {
+        // consume all ; or \n, then WRITE
+      } break;
+
+      case WRITE: {
+        // Write the instruction if a match is found, else panic.
+        // Maintain small (4?) of tagged enum. Read from this to match.
+      } break;
+
+      default: PANIC("Unknown asm parser state: %d.", state);
+    }
+  }
+
+  PANIC_IF(token != tokens->tokens_used, "Did not end evenly when parsing tokens.");
+
+  // - for each label in list of instructions with label, update from hashmap
+}
+
 i32 main(i32 num_args, char **args) {
   CALL;
-  if (num_args <= 1) {
-    printf(RED("Error") ": Expected assembly file names.\n");
+  if (num_args < 3 || (num_args - 1) % 2 != 0) {
+    printf(RED("Error") ": Expected assembly file names followed by binary name.\n");
     return 0;
   }
 
-  // NOTE: Could calibrate these at runtime, and use a vla.
-  const u32 memory_size = 32 KB;
+  // TODO: calibrate these at runtime
   const u32 file_size   =  2 KB;
+  const u32 binary_size =  2 KB;
   const u32 tokens_size =  8 KB;
+  const u32 memory_size = 32 KB;
   u8 memory[memory_size];
 
   Arena arena = arena_setup(memory, memory_size);
 
   file f = file_setup(arena_alloc(&arena, file_size, 1), file_size, NULL);
+  file binary = file_setup(arena_alloc(&arena, binary_size, 4), binary_size, NULL);
+
   Tokens tokens =
     tokens_setup(arena_alloc(&arena, tokens_size, 1), tokens_size);
 
-  for (u32 i = 1; i < num_args; i++) {
+  for (u32 i = 1; i < num_args; i += 2) {
 
     file_change_path(&f, args[i]);
     file_read_into_memory(&f);
@@ -421,11 +550,12 @@ i32 main(i32 num_args, char **args) {
 
     tokenize(&f, &tokens);
 
-    printf("Num Tokens: %d\n", tokens.tokens_used);
-    for (u32 i = 0; i < tokens.tokens_used; i++) {
-      token_display(&f, &tokens.tokens[i]);
-    }
+    file_change_path(&binary, args[2]);
+    parse_asm_and_generate_binary(&f, &binary, &tokens);
+    file_write_to_disk(&binary);
 
+    // Helps check for file errors.
+    file_close(&binary);
     file_close(&f);
   }
 

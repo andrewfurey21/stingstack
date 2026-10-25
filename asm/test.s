@@ -1,5 +1,5 @@
 # This should parse correctly.
-        addi x0, zero, 1 ; addi x1, x1, 0x2
+        addi x0, zero, 1 ;; addi x1, x1, 0x2
 _label0:addi x1, ra, 0x00;
         addi x2, sp, 0x40
         addi x3, gp, 5;
@@ -17,7 +17,7 @@ l_abel1:
         addi x13, a3, -6;
         addi x14, a4, 0x7fF;
   # another comment
-        addi x15, a5, -8; addi:
+        addi x15, a5, -8;
         addi x16, a6, -9
         addi x17, a7, -10;addi x18, s2, -11
         addi x19, s3, 10 # this is some comment

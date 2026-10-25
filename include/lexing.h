@@ -72,6 +72,7 @@ static inline u32 skip_whitespace(file *f, file_location *location, u32 start_of
 
   while (is_whitespace(whitespace)) {
     if (whitespace == '\n') file_location_add_new_line(location);
+    else file_location_next(location, whitespace);
     whitespace_in_bytes++;
     whitespace = file_read_byte_or_eof(f, start_of_whitespace + whitespace_in_bytes);
   }
@@ -91,7 +92,7 @@ static inline u32 skip_non_newline_whitespace(file *f, file_location *location, 
            whitespace);
 
   while (is_non_newline_whitespace(whitespace)) {
-    if (whitespace == '\n') file_location_add_new_line(location);
+    file_location_next(location, whitespace);
     whitespace_in_bytes++;
     whitespace = file_read_byte_or_eof(f, start_of_whitespace + whitespace_in_bytes);
   }
