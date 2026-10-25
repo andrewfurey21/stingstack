@@ -37,12 +37,14 @@ static inline void *arena_alloc(Arena *arena, u32 num_bytes, u32 alignment) {
            arena->bytes_used, num_bytes, arena->bytes_reserved);
 
   const u32 address     = (u32)(uptr)(arena->memory + arena->bytes_used);
-  const b8  is_aligned  = !!(address & (alignment - 1));
+  const b8  not_aligned  = !!(address & (alignment - 1));
   const u32 extra_bytes = (alignment - address & (alignment - 1));
 
-  arena->bytes_used += is_aligned * address;
+  arena->bytes_used += (not_aligned) * extra_bytes;
   void *memory = arena->memory + arena->bytes_used;
   arena->bytes_used += num_bytes;
+
+  PANIC_IF((uptr)(memory) % alignment != 0, "Something went wrong with alignment when allocating in arena.");
 
   RETURN_VAL(memory);
 }
