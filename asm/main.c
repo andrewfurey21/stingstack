@@ -10,17 +10,19 @@ rv32i assembler.
 TODO:
 
 - parse and generate the binary
-- testing to catch parsing errors, binary errors.
-- Add rest of rv32i
+- testing to catch parsing errors, binary errors + compare with gas.
+- Add rest of rv32i (and pseudoinstructions), look at baremetal
+- benchmarks?
 
 */
 
 /*
 
-ERRORS:
-
+Possible errors to check:
 - Labels with the same name.
 - 0x parses as hexadecimal 0.
+- unknown instruction
+- multiple successive labels should point to the same place.
 
 */
 
@@ -28,13 +30,20 @@ ERRORS:
 
 // TODO: perfect hash function generator. These should be generated.
 // https://www.corsix.org/content/using-a-lookup-table-to-correct-an-approximation
+
 #define MAX_INSTRUCTION_LEN 4
 #define NUM_INSTRUCTIONS 1
 #define MAX_REGISTER_LEN 4
 #define MAX_NUM_LABELS 10
-
-const char *instructions[] = {
+#define MAX_NUM_LATE_LABELS 32
+#define MAX_NUM_ARGS_PER_INSTRUCTION 4
+// NOTE: Maintain order between Instruction_Name and instruction_strings
+const char *instruction_strings[] = {
   "addi",
+};
+
+enum Instruction_Name {
+  ADDI,
 };
 
 const char *integer_registers[32] = {
@@ -90,11 +99,11 @@ i8 match_register(i8 *str, u32 length) {
 }
 
 i8 match_inst(i8 *str, u32 length) {
-  PANIC_IF(STATIC_ARRAY_LENGTH(instructions) > 255, "Too many instructions.");
+  PANIC_IF(STATIC_ARRAY_LENGTH(instruction_strings) > 255, "Too many instructions.");
 
-  for (i8 i = 0; i < STATIC_ARRAY_LENGTH(instructions); i++) {
-    if (length != string_length(instructions[i])) continue;
-    if (string_equal(instructions[i], str, length)) {
+  for (i8 i = 0; i < STATIC_ARRAY_LENGTH(instruction_strings); i++) {
+    if (length != string_length(instruction_strings[i])) continue;
+    if (string_equal(instruction_strings[i], str, length)) {
       return i;
     }
   }
@@ -102,30 +111,113 @@ i8 match_inst(i8 *str, u32 length) {
   return -1;
 }
 
-//
-
 enum Token_Type : u32 {
-  ADDI = 0,
+  TT_INSTRUCTION = 0,
 
-  REGISTER,
-  INTEGER_LITERAL,
-  LABEL,
+  TT_REGISTER,
+  TT_INTEGER_LITERAL,
+  TT_LABEL,
 
-  COMMA,
-  COLON,
-  NEWLINE,
-  SEMICOLON,
-  LEFT_BRACE,
-  RIGHT_BRACE,
+  TT_COMMA,
+  TT_COLON,
+  TT_NEWLINE,
+  TT_SEMICOLON,
+  TT_LEFT_BRACE,
+  TT_RIGHT_BRACE,
 
-  UNKNOWN,
+  TT_UNKNOWN,
 };
+
+b8 skippable_token(enum Token_Type type) {
+  return type == TT_SEMICOLON || type == TT_NEWLINE;
+}
 
 union Token_Info {
   u32 register_index;
   i32 integer_literal;
   u32 label_index;
+  u32 instruction_index;
 };
+
+enum Arg_Type {
+  ARG_OFFSET,
+  ARG_REGISTER,
+  ARG_INTEGER_LITERAL,
+  ARG_LABEL,
+  ARG_INSTRUCTION
+};
+
+union Arg_Info {
+  i32 offset;
+  u32 register_index;
+  i32 integer_literal;
+  u32 label_index;
+  u32 instruction_index;
+};
+
+struct Instruction_Arg {
+  enum Arg_Type type;
+  union Arg_Info info;
+};
+
+enum Instruction_Type { INST_TYPE_INSTRUCTION, INST_TYPE_LABEL };
+
+struct Instruction {
+  enum Instruction_Type type;
+  enum Instruction_Name name;
+  u32 args_used;
+  struct Instruction_Arg args[MAX_NUM_ARGS_PER_INSTRUCTION];
+};
+
+void instruction_append_arg(struct Instruction *inst, enum Arg_Type type, u32 data) {
+  CALL;
+  PANIC_IF(sizeof(data) != sizeof(union Arg_Info),
+           "Internal: data does not match size of Arg_Info.");
+
+  PANIC_IF(inst->args_used >= MAX_NUM_ARGS_PER_INSTRUCTION,
+           "Maxinum number of args exceeded at %d:%d.");
+
+  inst->args[inst->args_used].type = type;
+  inst->args[inst->args_used].info = (union Arg_Info)data;
+  inst->args_used++;
+
+  RETURN;
+}
+
+void match_instruction_and_write(struct Instruction *instruction, file *b) {
+  CALL;
+  u32 binary = 0;
+
+  // TODO: just display the arg for now nicely, to help debugging.
+  if (instruction->type == INST_TYPE_INSTRUCTION) {
+
+    printf("%s ", instruction_strings[instruction->name]);
+    for (u32 i = 0; i < instruction->args_used; i++) {
+      if (instruction->args[i].type == ARG_REGISTER) {
+        printf("%s", integer_registers[instruction->args[i].info.register_index]);
+      }
+      else {
+        printf("%d", instruction->args[i].info.integer_literal);
+      }
+      printf(", ");
+
+    }
+  } else if (instruction->type == INST_TYPE_LABEL) {
+    printf("label");
+  } else {
+    PANIC("Unknown instruction type.");
+  }
+  printf("\n");
+
+  // TODO: impl addi, add, lw, sw, beq, jalr before actually writing instructions.
+
+  // file_append_bytes(b, (i8 *)(&binary), sizeof(binary));
+  RETURN;
+}
+
+void fix_label_address(file *b, u32 instruction, u32 label_address) {
+
+}
 
 struct Token {
 
@@ -133,7 +225,7 @@ struct Token {
   union Token_Info info;
 
   file_location location;
-  u32 file_index;
+  u32 byte_index;
   u32 bytes_used;
 
 };
@@ -159,6 +251,12 @@ Tokens tokens_setup(void *memory, u32 bytes_reserved) {
   };
 }
 
+Token tokens_get(Tokens *tokens, u32 token_index) {
+  CALL;
+  PANIC_IF(token_index >= tokens->tokens_used, "Accessing token that is out of bounds.");
+  RETURN_VAL(tokens->tokens[token_index]);
+}
+
 u32 tokens_append(file *f, Tokens *tokens, Token t) {
   CALL;
   PANIC_IF(tokens->tokens_used >= tokens->tokens_reserved,
@@ -168,7 +266,7 @@ u32 tokens_append(file *f, Tokens *tokens, Token t) {
   tokens->tokens[tokens->tokens_used].location = tokens->location;
   tokens->tokens_used++;
 
-  file_location_move_until(&tokens->location, f, t.file_index, t.bytes_used);
+  file_location_move_until(&tokens->location, f, t.byte_index, t.bytes_used);
   RETURN_VAL(t.bytes_used);
 }
 
@@ -186,9 +284,9 @@ Token tokenize_number(file *f, u32 byte_index) {
   i8 byte = file_read_byte(f, byte_index);
 
   Token t = {
-    .type = INTEGER_LITERAL,
+    .type = TT_INTEGER_LITERAL,
     .info = 0,
-    .file_index = byte_index,
+    .byte_index = byte_index,
     .bytes_used = 0,
   };
 
@@ -247,9 +345,9 @@ Token tokenize_inst_or_reg_or_label(file *f, u32 byte_index) {
   const i8 first_byte = file_read_byte(f, byte_index);
 
   Token t = {
-    .type = UNKNOWN,
+    .type = TT_UNKNOWN,
     .info = 0,
-    .file_index = byte_index,
+    .byte_index = byte_index,
     .bytes_used = 0
   };
 
@@ -266,23 +364,24 @@ Token tokenize_inst_or_reg_or_label(file *f, u32 byte_index) {
   // This could probably be done better.
   if (length <= MAX_REGISTER_LEN && (register_index = match_register(f->data + start_index, length)) != -1) {
     t.info.register_index = register_index;
-    t.type = REGISTER;
+    t.type = TT_REGISTER;
   } else if (length <= MAX_INSTRUCTION_LEN && (inst_index = match_inst(f->data + start_index, length)) != -1) {
     PANIC_IF(((u8)inst_index) >= NUM_INSTRUCTIONS,
              "%d matches as an instruction, but there are only %d instructions",
              inst_index, NUM_INSTRUCTIONS);
-    t.type = inst_index;
+    t.type = TT_INSTRUCTION;
+    t.info.instruction_index = inst_index;
   } else {
     // For simplicity, x0-31 cannot be labels.
     // This should be redone.
-    t.type = LABEL;
+    t.type = TT_LABEL;
 
     if (first_byte == 'x' && length <= 3) {
       if (length == 2) {
         i8 second = f->data[start_index + 1];
         u32 register_index = (second - '0');
         if (register_index >= 0 && register_index <= 9) {
-          t.type = REGISTER;
+          t.type = TT_REGISTER;
           t.info.register_index = register_index;
         }
       } else if (length == 3) {
@@ -291,7 +390,7 @@ Token tokenize_inst_or_reg_or_label(file *f, u32 byte_index) {
         u32 register_index = (second - '0') * 10 + (third - '0');
 
         if (register_index >= 0 && register_index <= 31) {
-          t.type = REGISTER;
+          t.type = TT_REGISTER;
           t.info.register_index = register_index;
         }
       }
@@ -305,30 +404,30 @@ Token tokenize_inst_or_reg_or_label(file *f, u32 byte_index) {
 
 void token_display(file *f, Token *t) {
   if (t->type < NUM_INSTRUCTIONS) {
-    printf(RED("Instruction: %s\n"), instructions[t->type]);
+    printf(RED("Instruction: %s\n"), instruction_strings[t->type]);
     return;
   }
 
   switch (t->type) {
-    case REGISTER: {
+    case TT_REGISTER: {
       printf(YELLOW("Register: x%d"), t->info.register_index);
     } break;
-    case INTEGER_LITERAL: {
+    case TT_INTEGER_LITERAL: {
       printf(GREEN("Integer: " "%d"), t->info.integer_literal);
     } break;
-    case COMMA: {
+    case TT_COMMA: {
       printf("COMMA");
     } break;
-    case LABEL: {
-      printf(BLUE("Label: %.*s"), t->bytes_used, f->data + t->file_index);
+    case TT_LABEL: {
+      printf(BLUE("Label: %.*s"), t->bytes_used, f->data + t->byte_index);
     } break;
-    case NEWLINE: {
+    case TT_NEWLINE: {
       printf("NEWLINE");
     } break;
-    case SEMICOLON: {
+    case TT_SEMICOLON: {
       printf("SEMICOLON");
     } break;
-    case COLON: {
+    case TT_COLON: {
       printf("COLON");
     } break;
     default: PANIC("Trying to display unkown token %d.", t->type);
@@ -356,15 +455,15 @@ void tokenize(file *f, Tokens *tokens) {
     if (byte == '\n') {
       Token newline = {
         .bytes_used = 1,
-        .file_index = byte_index,
-        .type = NEWLINE,
+        .byte_index = byte_index,
+        .type = TT_NEWLINE,
       };
       token_length = tokens_append(f, tokens, newline);
     } else if(byte == '(' || byte == ')') {
       Token newline = {
         .bytes_used = 1,
-        .file_index = byte_index,
-        .type = byte == '(' ? LEFT_BRACE : RIGHT_BRACE,
+        .byte_index = byte_index,
+        .type = byte == '(' ? TT_LEFT_BRACE : TT_RIGHT_BRACE,
       };
       token_length = tokens_append(f, tokens, newline);
 
@@ -378,15 +477,15 @@ void tokenize(file *f, Tokens *tokens) {
     } else if (byte == ':') {
       Token colon = {
         .bytes_used = 1,
-        .file_index = byte_index,
-        .type = COLON,
+        .byte_index = byte_index,
+        .type = TT_COLON,
       };
       token_length = tokens_append(f, tokens, colon);
     } else if (byte == ';') {
       Token semicolon = {
         .bytes_used = 1,
-        .file_index = byte_index,
-        .type = SEMICOLON,
+        .byte_index = byte_index,
+        .type = TT_SEMICOLON,
       };
       token_length = tokens_append(f, tokens, semicolon);
     } else if (is_alpha(byte) || byte == '_') {
@@ -397,8 +496,8 @@ void tokenize(file *f, Tokens *tokens) {
         tokens_append(f, tokens, tokenize_number(f, byte_index));
     } else if (byte == ',') {
       Token comma = {
-        .type = COMMA,
-        .file_index = byte_index,
+        .type = TT_COMMA,
+        .byte_index = byte_index,
         .bytes_used = 1,
       };
 
@@ -419,14 +518,14 @@ void tokenize(file *f, Tokens *tokens) {
 /*
 
 TODO:
-- implement label address setup + insert
-- how to maintain list of instructions that take a label?
 - fix argument, immediate, offset states in parser
+- finish match_instruction_and_write
+- finish fix_label_address
 
 */
 
 struct Label_Address {
-  u32 file_index;
+  u32 byte_index;
   u32 label_length;
   u32 address;
   b8 occupied;
@@ -435,88 +534,283 @@ struct Label_Address {
 struct Label_Addresses {
   struct Label_Address *addresses;
   u32 used;
-  u32 allocated; // TODO: use "allocated" instead of "reserved"?
+  u32 allocated;
 };
 
 typedef struct Label_Addresses Label_Addresses;
 
-void label_addresses_setup(void *memory) {
-
+Label_Addresses label_addresses_setup(u8 *bytes, u32 num_bytes) {
+  memset(bytes, 0, num_bytes); // Defaults each address.occupied to false.
+  return (Label_Addresses) {
+    .addresses = (struct Label_Address *)bytes,
+    .allocated = num_bytes / sizeof(struct Label_Address),
+    .used = 0
+  };
 }
 
-void label_address_insert(file *f, u32 file_index, u32 length, u32 address) {
-  // PANIC_IF (inserting an address that already exists. Not allowed in the assembly)
+void label_address_insert(Label_Addresses *addresses, file *f, Token token, u32 address) {
+  CALL;
+
+  PANIC_IF(token.type != TT_LABEL,
+           "Internal: expected label token, found %d.", token.type);
+
+  PANIC_IF(addresses->used >= addresses->allocated,
+           "Internal: inserted maximum number of addresses.");
+
+  const u32 start_index = fnv_1a_hash(&f->data[token.byte_index], token.bytes_used) % addresses->allocated;
+  u32 index = start_index;
+  b8 looped = false;
+
+  while (!(start_index == index && looped)) {
+    looped = true;
+
+    if (addresses->addresses[index].occupied) {
+      const u32 other_index = addresses->addresses[index].byte_index;
+      const u32 other_length = addresses->addresses[index].label_length;
+      const u32 byte_index = token.byte_index;
+      const u32 length = token.bytes_used;
+
+      PANIC_IF(token.bytes_used == other_length && string_equal(&f->data[byte_index], &f->data[other_index], length),
+               "Duplicate label found %.*s at line %d:%d.", length, &f->data[byte_index],
+               token.location.line, token.location.column);
+    } else {
+      addresses->addresses[index].byte_index = token.byte_index;
+      addresses->addresses[index].label_length = token.bytes_used;
+      addresses->addresses[index].occupied = true;
+      addresses->addresses[index].address = address;
+      addresses->used++;
+      RETURN;
+    }
+
+    index++;
+    if (index >= addresses->allocated) {
+      index = 0;
+    }
+  }
+
+  RETURN;
 }
 
-void parse_asm_and_generate_binary(file *f, file *b, Tokens *tokens) {
+u32 label_addresses_get(Label_Addresses *addresses, file *f, Token token) {
+  CALL;
+  const u32 start_index = fnv_1a_hash(&f->data[token.byte_index], token.bytes_used) % addresses->allocated;
+  u32 index = start_index;
+  b8 looped = false;
+
+  PANIC_IF(addresses->used == 0, "Internal: Trying to get a label address on an empty label addresses map.");
+
+  while (addresses->addresses[index].occupied && !(start_index == index && looped)) {
+    looped = true;
+    if (token.byte_index == addresses->addresses[index].byte_index) {
+      RETURN_VAL(addresses->addresses[index].address);
+    }
+    index++;
+    if (index >= addresses->allocated) index = 0;
+  }
+
+  PANIC("Could not find label address.");
+  RETURN_VAL(0);
+}
+
+void parse_asm_and_generate_binary(file *const f, file *const b, Tokens *const tokens) {
+  CALL;
 
   enum Parse_State {
-    STATEMENT, INSTRUCTION, LABEL_DEFINITION, ARGUMENT, OFFSET, IMMEDIATE, END_STATEMENT, WRITE
-  } state;
-
-  state = STATEMENT;
+    PARSE_STATEMENT = 0,
+    PARSE_INSTRUCTION,
+    PARSE_LABEL_DEFINITION,
+    PARSE_ARGUMENT,
+    PARSE_NEXT_ARGUMENT,
+    PARSE_OFFSET,
+    PARSE_IMMEDIATE,
+    PARSE_END_STATEMENT,
+    PARSE_WRITE
+  } state = PARSE_STATEMENT;
 
   u32 instruction_counter = 0;
+  struct Instruction instruction = { 0 };
 
-  u32 token_skip, token = 0;
-  for (; token < tokens->tokens_used; token += token_skip) {
-    token_skip = 0;
+  const u32 label_mem_size = MAX_NUM_LABELS * sizeof(struct Label_Address);
+  u8 label_memory[label_mem_size];
+  Label_Addresses addresses = label_addresses_setup(label_memory, label_mem_size);
+
+  u32 num_late_labels = 0;
+  struct { u32 instruction; u32 token_index; }
+    late_labels[MAX_NUM_LATE_LABELS];
+
+  u32 tokens_consumed = 0;
+  u32 token = 0;
+  while (skippable_token(tokens_get(tokens, token).type)) token++;
+
+  while(token < tokens->tokens_used) {
+    // NOTE(YELLOW("Parse state:")" Token index: %d, parse state: %d", token, state);
+
+    tokens_consumed = 0;
+
+    Token current = tokens_get(tokens, token);
+    b8 last_token = token >= tokens->tokens_used - 1;
+    Token next = last_token ? (Token) { 0 } : tokens_get(tokens, token + 1);
 
     switch (state) {
-      case STATEMENT: {
-        // PANIC_IF no tokens left, since that wouldn't make sense with the for loop above
-        // if label + colon: label_definition
-        // else instruction (no panic here.)
+      case PARSE_STATEMENT: {
+        if (!last_token && current.type == TT_LABEL && next.type == TT_COLON) {
+          state = PARSE_LABEL_DEFINITION;
+        } else if (current.type == TT_INSTRUCTION){
+          state = PARSE_INSTRUCTION;
+        } else {
+          // TODO: replace %d with %s and token type -> const char *
+          PANIC("Expected instruction or label, found token type %d.", current.type);
+        }
       } break;
 
-      case LABEL_DEFINITION: {
-        // No panic, since label + colon was verified by statement case.
-        // Insert instruction counter + label info like file_index into label_addresses
+      case PARSE_LABEL_DEFINITION: {
+        PANIC_IF(last_token,
+                 "Internal: should have at least 2 tokens left when reading a label, got %d.",
+                 tokens->tokens_used - token);
+
+        PANIC_IF(current.type != TT_LABEL && next.type != TT_COLON,
+                 "Expected a label then a colon, got %*.s %*.s at line %d:%d.",
+                 current.bytes_used, &f->data[current.byte_index],
+                 next.bytes_used, &f->data[next.byte_index],
+                 current.location.line, current.location.column);
+
+        label_address_insert(&addresses, f, current, instruction_counter);
+        tokens_consumed = 2;
+        instruction.type = INST_TYPE_LABEL;
+
+        if (token < tokens->tokens_used - 2 &&
+            skippable_token(tokens->tokens[token + 2].type)) {
+          state = PARSE_END_STATEMENT;
+        } else {
+          state = PARSE_STATEMENT;
+        }
       } break;
 
-      case INSTRUCTION: {
-        // - [ADDI] len = NUM_INSTUCTIONS
-        // set instruction
-        // panic if not between
-        // then argument
+      case PARSE_INSTRUCTION: {
+        const i8 *instruction_name = &f->data[current.byte_index];
+        PANIC_IF(current.type >= NUM_INSTRUCTIONS,
+                 "Unknown instruction, got %.*s at line %d:%d",
+                 current.bytes_used, instruction_name, current.location.line);
+        // This is why index into instruction_strings has to match Instruction_Name
+        instruction.name = current.info.instruction_index;
+        instruction.type = INST_TYPE_INSTRUCTION;
+        tokens_consumed = 1;
+        state = PARSE_ARGUMENT;
       } break;
 
-      case ARGUMENT: {
-        // - (register | imm | offset) & ( ; | \n )+
-        // - (register | imm | offset) & , & arg
-        // if not reg or imm or offset panic
-        // if reg
-        // if ; or \n: end_statement, else if , consume and Argument, else panic
+      case PARSE_ARGUMENT: {
+        PANIC_IF(current.type != TT_REGISTER &&
+                 current.type != TT_LABEL &&
+                 current.type != TT_INTEGER_LITERAL,
+                 "Expected register or immediate when parsing argument, got token type %d.", current.type);
+
+        PANIC_IF(last_token, "Bad ending when parsing statement");
+
+        if (current.type == TT_LABEL || current.type == TT_INTEGER_LITERAL) {
+          state = PARSE_IMMEDIATE;
+          break;
+        }
+
+        instruction_append_arg(&instruction, ARG_REGISTER, current.info.register_index);
+
+        if (next.type == TT_SEMICOLON || next.type == TT_NEWLINE) {
+          state = PARSE_END_STATEMENT;
+          tokens_consumed = 1;
+        } else if (next.type == TT_COMMA) {
+          state = PARSE_NEXT_ARGUMENT;
+          tokens_consumed = 1;
+        } else {
+          PANIC("Expected ';' or '\\n' or ';', found %.*s.",
+                current.bytes_used, &f->data[current.byte_index]);
+        }
       } break;
 
-      case IMMEDIATE: {
+      case PARSE_IMMEDIATE: {
         // integer | label
+        PANIC_IF(last_token, "Early end of instruction.");
+
+        if (current.type == TT_INTEGER_LITERAL && next.type == TT_LEFT_BRACE) {
+          state = PARSE_OFFSET;
+          break;
+        }
+
+        if (current.type == TT_LABEL) {
+          PANIC_IF(num_late_labels >= MAX_NUM_LATE_LABELS,
+                   "Exceeded number of labels as immediates (%d).", num_late_labels);
+
+          late_labels[num_late_labels].instruction = instruction_counter;
+          late_labels[num_late_labels].token_index = current.byte_index;
+          num_late_labels++;
+
+          instruction_append_arg(&instruction, ARG_LABEL, 0); // We don't know yet where the label is.
+        } else if (current.type == TT_INTEGER_LITERAL) {
+          instruction_append_arg(&instruction, ARG_INTEGER_LITERAL, current.info.integer_literal);
+        } else {
+          PANIC("Expected integer literal or label when parsing an immediate, found %.*s",
+                current.bytes_used, &f->data[current.byte_index]);
+        }
+
+        if (next.type == TT_COMMA) {
+          state = PARSE_NEXT_ARGUMENT;
+        } else {
+          state = PARSE_END_STATEMENT;
+        }
+
+        tokens_consumed = 1;
       } break;
 
-      case OFFSET: {
+      case PARSE_OFFSET: {
         // integer & ( & register & )
+        PANIC("Have not implemented offsets yet.");
       } break;
 
-      case END_STATEMENT: {
-        // consume all ; or \n, then WRITE
+      case PARSE_NEXT_ARGUMENT: {
+        PANIC_IF(current.type != TT_COMMA,
+                 "Expected ',' after an argument, found .*s.",
+                 current.bytes_used, &f->data[current.byte_index]);
+        tokens_consumed = 1;
+        state = PARSE_ARGUMENT;
       } break;
 
-      case WRITE: {
-        // Write the instruction if a match is found, else panic.
-        // Maintain small (4?) of tagged enum. Read from this to match.
+      case PARSE_END_STATEMENT: {
+        PANIC_IF(!skippable_token(current.type),
+                 "Expected ';' or \\n after an instruction, found %.*s (token type %d).",
+                 current.bytes_used, &f->data[current.byte_index], current.type);
+        while (token + tokens_consumed < tokens->tokens_used &&
+               skippable_token(tokens_get(tokens, token + tokens_consumed).type)){
+          tokens_consumed++; // At start, it's zero.
+        }
+        state = PARSE_WRITE;
       } break;
 
-      default: PANIC("Unknown asm parser state: %d.", state);
+      case PARSE_WRITE: {
+        match_instruction_and_write(&instruction, b);
+        instruction_counter++;
+        instruction = (struct Instruction) { 0 };
+        state = PARSE_STATEMENT;
+      } break;
+
+      default: PANIC("Internal: Unknown asm parser state: %d.", state);
     }
+
+    token += tokens_consumed;
   }
 
   PANIC_IF(token != tokens->tokens_used, "Did not end evenly when parsing tokens.");
 
-  // - for each label in list of instructions with label, update from hashmap
+  NOTE("Finished parsing %s.", f->path);
+
+  for (u32 label = 0; label < num_late_labels; label++) {
+    const u32 late_address = label_addresses_get(&addresses, f, tokens->tokens[late_labels[label].token_index]);
+    fix_label_address(b, late_labels[label].instruction, late_address);
+  }
+
+  RETURN;
 }
 
 i32 main(i32 num_args, char **args) {
   CALL;
+
   if (num_args < 3 || (num_args - 1) % 2 != 0) {
     printf(RED("Error") ": Expected assembly file names followed by binary name.\n");
     return 0;
@@ -534,8 +828,7 @@ i32 main(i32 num_args, char **args) {
   file f = file_setup(arena_alloc(&arena, file_size, 1), file_size, NULL);
   file binary = file_setup(arena_alloc(&arena, binary_size, 4), binary_size, NULL);
 
-  Tokens tokens =
-    tokens_setup(arena_alloc(&arena, tokens_size, 1), tokens_size);
+  Tokens tokens = tokens_setup(arena_alloc(&arena, tokens_size, 1), tokens_size);
 
   for (u32 i = 1; i < num_args; i += 2) {
 
@@ -554,7 +847,6 @@ i32 main(i32 num_args, char **args) {
     parse_asm_and_generate_binary(&f, &binary, &tokens);
     file_write_to_disk(&binary);
 
-    // Helps check for file errors.
     file_close(&binary);
     file_close(&f);
   }

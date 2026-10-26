@@ -139,6 +139,14 @@ _file_write_to_disk_return:
   RETURN;
 }
 
+static inline void file_append_bytes(file *f, i8 *bytes, u32 num_bytes) {
+  for (u32 i = 0; i < num_bytes; i++) {
+    PANIC_IF(f->bytes_used >= f->bytes_reserved,
+             "File limit reached while writing to %s.", f->path);
+    f->data[f->bytes_used++] = bytes[i];
+  }
+}
+
 struct file_location {
   u32 line;
   u32 column;

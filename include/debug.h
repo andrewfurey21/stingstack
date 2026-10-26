@@ -48,6 +48,7 @@ static inline void panic_or_note_if(const b8 expr,
     }
   }
   va_end(args);
+  fflush(stdout);
 // #endif
 
 }

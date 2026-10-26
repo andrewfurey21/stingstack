@@ -9,6 +9,7 @@
 - booth
 - cuik
 - https://codeberg.org/thesalt/lance
+- github.com/hexratcc/rat
 
 ## things to look into
 
@@ -24,7 +25,7 @@
 - `#run func_call()`, like jai, convert to bytecode and run at compile time.
 - methods
 - simple stack trace in debug mode with a static error object.
-- enum class, but type inferred too. like .VALUE
+- typesafe enums, but type inferred too. like .VALUE
 - how hard is it to know if value is undefined? at compile time, or force mark as undefined like zig?
 - defer
 - default params

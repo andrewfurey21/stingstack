@@ -5,6 +5,7 @@
 #include "debug.h"
 #include "defines.h"
 #include "file.h"
+#include "hash.h"
 #include "includes.h"
 #include "lexing.h"
 #include "linux.h"

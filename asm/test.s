@@ -1,4 +1,6 @@
 # This should parse correctly.
+
+;;
         addi x0, zero, 1 ;; addi x1, x1, 0x2
 _label0:addi x1, ra, 0x00;
         addi x2, sp, 0x40
