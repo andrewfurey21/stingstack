@@ -9,7 +9,10 @@ rv32i assembler.
 
 TODO:
 
-- parse and generate the binary
+- need a nice way to generate a table of instructions
+- need functions for writing r,i,s,u,b,j instructions (including exceptions)
+- implement one of every type
+- generate the binary
 - testing to catch parsing errors, binary errors + compare with gas.
 - Add rest of rv32i (and pseudoinstructions), look at baremetal
 - benchmarks?
@@ -38,15 +41,15 @@ Possible errors to check:
 #define MAX_NUM_LATE_LABELS 32
 #define MAX_NUM_ARGS_PER_INSTRUCTION 4
 // NOTE: Maintain order between Instruction_Name and instruction_strings
-const char *instruction_strings[] = {
+static const char *instruction_strings[] = {
   "addi",
 };
 
 enum Instruction_Name {
-  ADDI,
+  INST_ADDI,
 };
 
-const char *integer_registers[32] = {
+static const char *integer_registers[32] = {
   "zero",
   "ra",
   "sp",
@@ -169,6 +172,19 @@ struct Instruction {
   struct Instruction_Arg args[MAX_NUM_ARGS_PER_INSTRUCTION];
 };
 
+// NOTE: Be careful no checks.
+#define INST(_name, num_args, type0, type1, type2, type3)                              \
+  (struct Instruction) {                                                               \
+    .type = INST_TYPE_INSTRUCTION,                                                     \
+    .name = _name,                                                                     \
+    .args_used = num_args,                                                             \
+    .args = { {.type = type0 }, {.type = type1 }, {.type = type2 }, {.type = type3 } } \
+  }
+
+static const struct Instruction availible_instructions[] = {
+  INST(INST_ADDI, 3, ARG_REGISTER, ARG_REGISTER, ARG_INTEGER_LITERAL, 0),
+};
+
 void instruction_append_arg(struct Instruction *inst, enum Arg_Type type, u32 data) {
   CALL;
   PANIC_IF(sizeof(data) != sizeof(union Arg_Info),
@@ -186,9 +202,16 @@ void instruction_append_arg(struct Instruction *inst, enum Arg_Type type, u32 da
 
 void match_instruction_and_write(struct Instruction *instruction, file *b) {
   CALL;
+
   u32 binary = 0;
 
+  if (instruction->type != INST_TYPE_INSTRUCTION) {
+    PANIC_IF(instruction->type != INST_TYPE_LABEL, "Expected label.");
+    RETURN;
+  }
+
   // TODO: just display the arg for now nicely, to help debugging.
+  // impl addi, add, lw, sw, beq, jalr before actually writing instructions.
   if (instruction->type == INST_TYPE_INSTRUCTION) {
 
     printf("%s ", instruction_strings[instruction->name]);
@@ -209,7 +232,6 @@ void match_instruction_and_write(struct Instruction *instruction, file *b) {
   }
   printf("\n");
 
-  // TODO: impl addi, add, lw, sw, beq, jalr before actually writing instructions.
 
   // file_append_bytes(b, (i8 *)(&binary), sizeof(binary));
   RETURN;
@@ -518,7 +540,6 @@ void tokenize(file *f, Tokens *tokens) {
 /*
 
 TODO:
-- fix argument, immediate, offset states in parser
 - finish match_instruction_and_write
 - finish fix_label_address
 
@@ -825,30 +846,30 @@ i32 main(i32 num_args, char **args) {
 
   Arena arena = arena_setup(memory, memory_size);
 
-  file f = file_setup(arena_alloc(&arena, file_size, 1), file_size, NULL);
+  file assembly = file_setup(arena_alloc(&arena, file_size, 1), file_size, NULL);
   file binary = file_setup(arena_alloc(&arena, binary_size, 4), binary_size, NULL);
 
   Tokens tokens = tokens_setup(arena_alloc(&arena, tokens_size, 1), tokens_size);
 
   for (u32 i = 1; i < num_args; i += 2) {
 
-    file_change_path(&f, args[i]);
-    file_read_into_memory(&f);
+    file_change_path(&assembly, args[i]);
+    file_read_into_memory(&assembly);
 
-    if (file_failed(&f)) {
-      printf(RED("Error") ": could not read %s.", f.path);
-      file_close(&f);
+    if (file_failed(&assembly)) {
+      printf(RED("Error") ": could not read %s.", assembly.path);
+      file_close(&assembly);
       continue;
     }
 
-    tokenize(&f, &tokens);
+    tokenize(&assembly, &tokens);
 
     file_change_path(&binary, args[2]);
-    parse_asm_and_generate_binary(&f, &binary, &tokens);
+    parse_asm_and_generate_binary(&assembly, &binary, &tokens);
     file_write_to_disk(&binary);
 
     file_close(&binary);
-    file_close(&f);
+    file_close(&assembly);
   }
 
   RETURN_VAL(0);
