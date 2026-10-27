@@ -9,8 +9,8 @@ rv32i assembler.
 
 TODO:
 
-- impl 1 instruction of every type (risubj), including exceptions
 - generate the binary for each implemented instruction
+- fix labels
 - generate correctly with elf format
 - testing to catch parsing errors, binary errors + compare with gas.
 - Add rest of rv32i (and pseudoinstructions), look at baremetal
@@ -197,8 +197,6 @@ void instruction_append_arg(struct Instruction *inst, enum Arg_Type type, u32 da
   PANIC_IF(sizeof(data) != sizeof(union Arg_Info),
            "Internal: data does not match size of Arg_Info.");
 
-  // NOTE("Type: %d, data %d.", type, data);
-
   PANIC_IF(inst->args_used >= MAX_NUM_ARGS_PER_INSTRUCTION,
            "Maxinum number of args exceeded.");
 
@@ -212,35 +210,33 @@ void instruction_append_arg(struct Instruction *inst, enum Arg_Type type, u32 da
 void match_instruction_and_write(struct Instruction *instruction, file *b) {
   CALL;
 
-  u32 binary = 0;
+  PANIC_IF(instruction->type != INST_TYPE_INSTRUCTION &&
+           instruction->type != INST_TYPE_LABEL, "Expected label or instruction.");
 
-  if (instruction->type != INST_TYPE_INSTRUCTION) {
-    PANIC_IF(instruction->type != INST_TYPE_LABEL, "Expected label.");
+  if (instruction->type == INST_TYPE_LABEL) {
+    printf("label");
     RETURN;
   }
 
-  if (instruction->type == INST_TYPE_INSTRUCTION) {
-
-    printf("%s ", instruction_strings[instruction->name]);
-    for (u32 i = 0; i < instruction->args_used; i++) {
-      if (instruction->args[i].type == ARG_REGISTER) {
-        printf("%s", integer_registers[instruction->args[i].info.register_index]);
-      }
-      else {
-        printf("%d", instruction->args[i].info.integer_literal);
-      }
-      printf(", ");
-
+  printf("%s ", instruction_strings[instruction->name]);
+  for (u32 i = 0; i < instruction->args_used; i++) {
+    if (instruction->args[i].type == ARG_REGISTER) {
+      printf("%s", integer_registers[instruction->args[i].info.register_index]);
     }
-  } else if (instruction->type == INST_TYPE_LABEL) {
-    printf("label");
-  } else {
-    PANIC("Unknown instruction type.");
+    else {
+      printf("%d", instruction->args[i].info.integer_literal);
+    }
+    printf(", ");
   }
   printf("\n");
 
+  u32 binary = 0;
 
-  // file_append_bytes(b, (i8 *)(&binary), sizeof(binary));
+  switch (instruction->name) {
+    default: PANIC("Unimplemented instruction id: %d", instruction->name);
+  }
+
+  file_append_bytes(b, (i8 *)(&binary), sizeof(binary));
   RETURN;
 }
 
