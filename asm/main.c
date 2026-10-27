@@ -40,7 +40,7 @@ Possible errors to check:
 #define MAX_REGISTER_LEN 4
 #define MAX_NUM_LABELS 10
 #define MAX_NUM_LATE_LABELS 32
-#define MAX_NUM_ARGS_PER_INSTRUCTION 4
+#define MAX_NUM_ARGS_PER_INSTRUCTION 3
 // NOTE: Maintain order between Instruction_Name and instruction_strings and available_instructions
 static const char *instruction_strings[NUM_INSTRUCTIONS] = {
   "addi", "lw", "beq", "sra", "slli", "sh", "jal", "auipc", "ecall"
@@ -51,7 +51,7 @@ enum Instruction_Name {
 };
 
 enum Arg_Type {
-  ARG_OFFSET,
+  ARG_OFFSET = 0,
   ARG_REGISTER,
   ARG_INTEGER_LITERAL,
   ARG_LABEL,
@@ -75,6 +75,7 @@ enum Instruction_Type { INST_TYPE_INSTRUCTION, INST_TYPE_LABEL };
 
 // TODO: add file location (copy from instruction token)
 struct Instruction {
+  file_location location;
   enum Instruction_Type type;
   enum Instruction_Name name;
   u32 args_used;
@@ -83,33 +84,35 @@ struct Instruction {
 
 typedef struct Instruction Instruction;
 
-#define INST(_name, num_args, type0, type1, type2, type3)                              \
-  (struct Instruction) {                                                               \
-    .type = INST_TYPE_INSTRUCTION,                                                     \
-    .name = _name,                                                                     \
-    .args_used = num_args,                                                             \
-    .args = { {.type = type0 }, {.type = type1 }, {.type = type2 }, {.type = type3 } } \
+#define INST(_name, num_args, type0, type1, type2)                   \
+  (struct Instruction) {                                             \
+    .type = INST_TYPE_INSTRUCTION,                                   \
+    .name = _name,                                                   \
+    .args_used = num_args,                                           \
+    .args = { {.type = type0 }, {.type = type1 }, {.type = type2 } } \
   }
 
 static const Instruction available_instructions[NUM_INSTRUCTIONS] = {
-  INST(INST_ADDI, 3, ARG_REGISTER, ARG_REGISTER, ARG_INTEGER_LITERAL, 0),
-  INST(INST_LW, 3, ARG_REGISTER, ARG_INTEGER_LITERAL, ARG_REGISTER, 0),
-  INST(INST_BEQ, 3, ARG_REGISTER, ARG_REGISTER, ARG_LABEL, 0),
-  INST(INST_SRA, 3, ARG_REGISTER, ARG_REGISTER, ARG_REGISTER, 0),
-  INST(INST_SLLI, 3, ARG_REGISTER, ARG_REGISTER, ARG_INTEGER_LITERAL, 0),
-  INST(INST_SH, 3, ARG_REGISTER, ARG_INTEGER_LITERAL, ARG_REGISTER, 0),
-  INST(INST_JAL, 2, ARG_REGISTER, ARG_LABEL, 0, 0),
-  INST(INST_AUIPC, 2, ARG_REGISTER, ARG_INTEGER_LITERAL, 0, 0),
-  INST(INST_ECALL, 0, 0, 0, 0, 0),
+  INST(INST_ADDI, 3, ARG_REGISTER, ARG_REGISTER, ARG_INTEGER_LITERAL),
+  INST(INST_LW, 3, ARG_REGISTER, ARG_INTEGER_LITERAL, ARG_REGISTER),
+
+  INST(INST_BEQ, 3, ARG_REGISTER, ARG_REGISTER, ARG_LABEL),
+  INST(INST_SRA, 3, ARG_REGISTER, ARG_REGISTER, ARG_REGISTER),
+  INST(INST_SLLI, 3, ARG_REGISTER, ARG_REGISTER, ARG_INTEGER_LITERAL),
+  INST(INST_SH, 3, ARG_REGISTER, ARG_INTEGER_LITERAL, ARG_REGISTER),
+  INST(INST_JAL, 2, ARG_REGISTER, ARG_LABEL, 0),
+  INST(INST_AUIPC, 2, ARG_REGISTER, ARG_INTEGER_LITERAL, 0),
+  INST(INST_ECALL, 0, 0, 0, 0),
 };
 
 
 void panic_if_bad_instruction(Instruction good, Instruction bad) {
-  // TODO: when panic, also write out file location.
   PANIC_IF(good.args_used != bad.args_used,
-           "Expected %d args used, but got %d", good.args_used, bad.args_used);
+           "Expected %d args used, but got %d on line %d, %d",
+           good.args_used, bad.args_used, bad.location.line, bad.location.column);
   for (u32 i = 0; i < good.args_used; i++) {
-    PANIC_IF(good.args[i].type != bad.args[i].type, "Expected arg type %d, but got %d", good.args[i].type, bad.args[i].type);
+    PANIC_IF(good.args[i].type != bad.args[i].type, "Expected arg %d type %d, but got %d on line %d:%d.",
+             i, good.args[i].type, bad.args[i].type, bad.location.line, bad.location.column);
   }
 }
 
@@ -247,7 +250,8 @@ void match_instruction_and_write(Instruction *instruction, file *b) {
 
   u32 binary = 0;
 
-  panic_if_bad_instruction(available_instructions[instruction->type], *instruction);
+  NOTE("Checking %d", instruction->type);
+  panic_if_bad_instruction(available_instructions[instruction->name], *instruction);
 
   switch (instruction->name) {
     // - I [31 imm 20] [19 rs1 15] [14 funct3 12] [11 rd 7] [6 op 0]
@@ -745,6 +749,7 @@ void parse_asm_and_generate_binary(file *const f, file *const b, Tokens *const t
         // This is why index into instruction_strings has to match Instruction_Name
         instruction.name = current.info.instruction_index;
         instruction.type = INST_TYPE_INSTRUCTION;
+        instruction.location = current.location;
         tokens_consumed = 1;
         state = PARSE_ARGUMENT;
       } break;
@@ -826,9 +831,9 @@ void parse_asm_and_generate_binary(file *const f, file *const b, Tokens *const t
         Token reg = tokens->tokens[token + 2];
         Token right_brace = tokens->tokens[token + 3];
 
-        PANIC_IF(offset.type != TT_INTEGER_LITERAL &&
-                 left_brace.type != TT_LEFT_BRACE &&
-                 reg.type != TT_REGISTER &&
+        PANIC_IF(offset.type != TT_INTEGER_LITERAL ||
+                 left_brace.type != TT_LEFT_BRACE ||
+                 reg.type != TT_REGISTER ||
                  right_brace.type != TT_RIGHT_BRACE,
                  "Expected tokens %d %d %d %d, got %d %d %d %d.",
                  TT_INTEGER_LITERAL, TT_LEFT_BRACE, TT_REGISTER, TT_RIGHT_BRACE,
@@ -839,7 +844,7 @@ void parse_asm_and_generate_binary(file *const f, file *const b, Tokens *const t
 
         tokens_consumed = 4;
 
-        Token next = tokens_get(tokens, token + 4); // UB?
+        Token next = tokens_get(tokens, token + 4);
         if (next.type == TT_COMMA) {
           state = PARSE_NEXT_ARGUMENT;
         } else {
