@@ -65,6 +65,8 @@ static inline void panic_or_note_if(const b8 expr,
 #define NOTE(fmt, ...) \
   panic_or_note_if(true, false, __FILE__, __func__, __LINE__, fmt, ##__VA_ARGS__, NULL)
 
+#define STATIC_ASSERT(expr, str) _Static_assert(expr, str)
+
 #define debug_clear_array(memory, size)    \
     if (DEBUG) {                           \
       const u32 s_ = (size);               \

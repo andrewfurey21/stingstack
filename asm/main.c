@@ -22,10 +22,11 @@ TODO:
 /*
 
 Possible errors to check:
-- Labels with the same name.
+- Labels with the same name. also, labels can't start with numbers.
 - 0x parses as hexadecimal 0.
 - unknown instruction
 - multiple successive labels should point to the same place.
+- since offsets are parsed in their own case, test lw at the end of test.s.
 
 */
 
@@ -35,18 +36,62 @@ Possible errors to check:
 // https://www.corsix.org/content/using-a-lookup-table-to-correct-an-approximation
 
 #define MAX_INSTRUCTION_LEN 4
-#define NUM_INSTRUCTIONS 1
+#define NUM_INSTRUCTIONS 3
 #define MAX_REGISTER_LEN 4
 #define MAX_NUM_LABELS 10
 #define MAX_NUM_LATE_LABELS 32
 #define MAX_NUM_ARGS_PER_INSTRUCTION 4
-// NOTE: Maintain order between Instruction_Name and instruction_strings
+// NOTE: Maintain order between Instruction_Name and instruction_strings and available_instructions
 static const char *instruction_strings[] = {
-  "addi",
+  "addi", "lw", "beq"
 };
 
 enum Instruction_Name {
-  INST_ADDI,
+  INST_ADDI, INST_LW, INST_BEQ
+};
+
+enum Arg_Type {
+  ARG_OFFSET,
+  ARG_REGISTER,
+  ARG_INTEGER_LITERAL,
+  ARG_LABEL,
+  ARG_INSTRUCTION
+};
+
+union Arg_Info {
+  i32 offset;
+  u32 register_index;
+  i32 integer_literal;
+  u32 label_index;
+  u32 instruction_index;
+};
+
+struct Instruction_Arg {
+  enum Arg_Type type;
+  union Arg_Info info;
+};
+
+enum Instruction_Type { INST_TYPE_INSTRUCTION, INST_TYPE_LABEL };
+
+struct Instruction {
+  enum Instruction_Type type;
+  enum Instruction_Name name;
+  u32 args_used;
+  struct Instruction_Arg args[MAX_NUM_ARGS_PER_INSTRUCTION];
+};
+
+#define INST(_name, num_args, type0, type1, type2, type3)                              \
+  (struct Instruction) {                                                               \
+    .type = INST_TYPE_INSTRUCTION,                                                     \
+    .name = _name,                                                                     \
+    .args_used = num_args,                                                             \
+    .args = { {.type = type0 }, {.type = type1 }, {.type = type2 }, {.type = type3 } } \
+  }
+
+static const struct Instruction available_instructions[NUM_INSTRUCTIONS] = {
+  INST(INST_ADDI, 3, ARG_REGISTER, ARG_REGISTER, ARG_INTEGER_LITERAL, 0),
+  INST(INST_LW, 3, ARG_REGISTER, ARG_INTEGER_LITERAL, ARG_REGISTER, 0),
+  INST(INST_BEQ, 3, ARG_REGISTER, ARG_REGISTER, ARG_LABEL, 0),
 };
 
 static const char *integer_registers[32] = {
@@ -142,56 +187,15 @@ union Token_Info {
   u32 instruction_index;
 };
 
-enum Arg_Type {
-  ARG_OFFSET,
-  ARG_REGISTER,
-  ARG_INTEGER_LITERAL,
-  ARG_LABEL,
-  ARG_INSTRUCTION
-};
-
-union Arg_Info {
-  i32 offset;
-  u32 register_index;
-  i32 integer_literal;
-  u32 label_index;
-  u32 instruction_index;
-};
-
-struct Instruction_Arg {
-  enum Arg_Type type;
-  union Arg_Info info;
-};
-
-enum Instruction_Type { INST_TYPE_INSTRUCTION, INST_TYPE_LABEL };
-
-struct Instruction {
-  enum Instruction_Type type;
-  enum Instruction_Name name;
-  u32 args_used;
-  struct Instruction_Arg args[MAX_NUM_ARGS_PER_INSTRUCTION];
-};
-
-// NOTE: Be careful no checks.
-#define INST(_name, num_args, type0, type1, type2, type3)                              \
-  (struct Instruction) {                                                               \
-    .type = INST_TYPE_INSTRUCTION,                                                     \
-    .name = _name,                                                                     \
-    .args_used = num_args,                                                             \
-    .args = { {.type = type0 }, {.type = type1 }, {.type = type2 }, {.type = type3 } } \
-  }
-
-static const struct Instruction availible_instructions[] = {
-  INST(INST_ADDI, 3, ARG_REGISTER, ARG_REGISTER, ARG_INTEGER_LITERAL, 0),
-};
-
 void instruction_append_arg(struct Instruction *inst, enum Arg_Type type, u32 data) {
   CALL;
   PANIC_IF(sizeof(data) != sizeof(union Arg_Info),
            "Internal: data does not match size of Arg_Info.");
 
+  // NOTE("Type: %d, data %d.", type, data);
+
   PANIC_IF(inst->args_used >= MAX_NUM_ARGS_PER_INSTRUCTION,
-           "Maxinum number of args exceeded at %d:%d.");
+           "Maxinum number of args exceeded.");
 
   inst->args[inst->args_used].type = type;
   inst->args[inst->args_used].info = (union Arg_Info)data;
@@ -238,7 +242,7 @@ void match_instruction_and_write(struct Instruction *instruction, file *b) {
 }
 
 void fix_label_address(file *b, u32 instruction, u32 label_address) {
-
+  NOTE("Fixing instrution %d label %d.", instruction, label_address);
 }
 
 struct Token {
@@ -425,8 +429,8 @@ Token tokenize_inst_or_reg_or_label(file *f, u32 byte_index) {
 }
 
 void token_display(file *f, Token *t) {
-  if (t->type < NUM_INSTRUCTIONS) {
-    printf(RED("Instruction: %s\n"), instruction_strings[t->type]);
+  if (t->type == TT_INSTRUCTION) {
+    printf(RED("Instruction: %s\n"), instruction_strings[t->info.instruction_index]);
     return;
   }
 
@@ -451,6 +455,12 @@ void token_display(file *f, Token *t) {
     } break;
     case TT_COLON: {
       printf("COLON");
+    } break;
+    case TT_LEFT_BRACE: {
+      printf("(");
+    } break;
+    case TT_RIGHT_BRACE: {
+      printf(")");
     } break;
     default: PANIC("Trying to display unkown token %d.", t->type);
   }
@@ -618,19 +628,30 @@ u32 label_addresses_get(Label_Addresses *addresses, file *f, Token token) {
   u32 index = start_index;
   b8 looped = false;
 
-  PANIC_IF(addresses->used == 0, "Internal: Trying to get a label address on an empty label addresses map.");
+  PANIC_IF(addresses->used == 0, "There are no labels.");
 
   while (addresses->addresses[index].occupied && !(start_index == index && looped)) {
     looped = true;
-    if (token.byte_index == addresses->addresses[index].byte_index) {
+    struct Label_Address addr = addresses->addresses[index];
+    if (token.bytes_used == addr.label_length &&
+        string_equal(&f->data[token.byte_index], &f->data[addr.byte_index], addr.label_length)) {
       RETURN_VAL(addresses->addresses[index].address);
     }
     index++;
     if (index >= addresses->allocated) index = 0;
   }
 
-  PANIC("Could not find label address.");
+  PANIC("Could not find label address %.*s. Start index: %d.", token.bytes_used, &f->data[token.byte_index], start_index);
   RETURN_VAL(0);
+}
+
+void label_addresses_display(Label_Addresses *addresses, file *f) {
+  for (u32 i = 0; i < addresses->allocated; i++) {
+    struct Label_Address addr = addresses->addresses[i];
+    if (addr.occupied) {
+      NOTE("Label %.*s Address: %d Index %d.", addr.label_length, &f->data[addr.byte_index], addr.address, i);
+    }
+  }
 }
 
 void parse_asm_and_generate_binary(file *const f, file *const b, Tokens *const tokens) {
@@ -640,6 +661,7 @@ void parse_asm_and_generate_binary(file *const f, file *const b, Tokens *const t
     PARSE_STATEMENT = 0,
     PARSE_INSTRUCTION,
     PARSE_LABEL_DEFINITION,
+    PARSE_END_LABEL_DEFINITION,
     PARSE_ARGUMENT,
     PARSE_NEXT_ARGUMENT,
     PARSE_OFFSET,
@@ -701,7 +723,7 @@ void parse_asm_and_generate_binary(file *const f, file *const b, Tokens *const t
 
         if (token < tokens->tokens_used - 2 &&
             skippable_token(tokens->tokens[token + 2].type)) {
-          state = PARSE_END_STATEMENT;
+          state = PARSE_END_LABEL_DEFINITION;
         } else {
           state = PARSE_STATEMENT;
         }
@@ -748,7 +770,7 @@ void parse_asm_and_generate_binary(file *const f, file *const b, Tokens *const t
 
       case PARSE_IMMEDIATE: {
         // integer | label
-        PANIC_IF(last_token, "Early end of instruction.");
+        PANIC_IF(last_token, "Early end of instruction."); // NOTE: forces newline at the end.
 
         if (current.type == TT_INTEGER_LITERAL && next.type == TT_LEFT_BRACE) {
           state = PARSE_OFFSET;
@@ -759,8 +781,10 @@ void parse_asm_and_generate_binary(file *const f, file *const b, Tokens *const t
           PANIC_IF(num_late_labels >= MAX_NUM_LATE_LABELS,
                    "Exceeded number of labels as immediates (%d).", num_late_labels);
 
+          // NOTE("instruction: %d, label: %.*s", instruction_counter, current.bytes_used, &f->data[current.byte_index]);
+
           late_labels[num_late_labels].instruction = instruction_counter;
-          late_labels[num_late_labels].token_index = current.byte_index;
+          late_labels[num_late_labels].token_index = token;
           num_late_labels++;
 
           instruction_append_arg(&instruction, ARG_LABEL, 0); // We don't know yet where the label is.
@@ -782,7 +806,34 @@ void parse_asm_and_generate_binary(file *const f, file *const b, Tokens *const t
 
       case PARSE_OFFSET: {
         // integer & ( & register & )
-        PANIC("Have not implemented offsets yet.");
+        b8 enough_tokens = token + 4 < tokens->tokens_used;
+        PANIC_IF(!enough_tokens, "Early end of offset."); // NOTE: forces newline at the end.
+
+        Token offset = current;
+        Token left_brace = next;
+        Token reg = tokens->tokens[token + 2];
+        Token right_brace = tokens->tokens[token + 3];
+
+        PANIC_IF(offset.type != TT_INTEGER_LITERAL &&
+                 left_brace.type != TT_LEFT_BRACE &&
+                 reg.type != TT_REGISTER &&
+                 right_brace.type != TT_RIGHT_BRACE,
+                 "Expected tokens %d %d %d %d, got %d %d %d %d.",
+                 TT_INTEGER_LITERAL, TT_LEFT_BRACE, TT_REGISTER, TT_RIGHT_BRACE,
+                 offset.type, left_brace.type, reg.type, right_brace.type);
+
+        instruction_append_arg(&instruction, ARG_INTEGER_LITERAL, offset.info.integer_literal);
+        instruction_append_arg(&instruction, ARG_REGISTER, reg.info.register_index);
+
+        tokens_consumed = 4;
+
+        Token next = tokens_get(tokens, token + 4); // UB?
+        if (next.type == TT_COMMA) {
+          state = PARSE_NEXT_ARGUMENT;
+        } else {
+          state = PARSE_END_STATEMENT;
+        }
+
       } break;
 
       case PARSE_NEXT_ARGUMENT: {
@@ -804,6 +855,17 @@ void parse_asm_and_generate_binary(file *const f, file *const b, Tokens *const t
         state = PARSE_WRITE;
       } break;
 
+      case PARSE_END_LABEL_DEFINITION: {
+        PANIC_IF(!skippable_token(current.type),
+                 "Expected ';' or \\n after a label definition, found %.*s (token type %d).",
+                 current.bytes_used, &f->data[current.byte_index], current.type);
+        while (token + tokens_consumed < tokens->tokens_used &&
+               skippable_token(tokens_get(tokens, token + tokens_consumed).type)){
+          tokens_consumed++; // At start, it's zero.
+        }
+        state = PARSE_STATEMENT;
+      } break;
+
       case PARSE_WRITE: {
         match_instruction_and_write(&instruction, b);
         instruction_counter++;
@@ -811,6 +873,7 @@ void parse_asm_and_generate_binary(file *const f, file *const b, Tokens *const t
         state = PARSE_STATEMENT;
       } break;
 
+      // TODO: have a panic for release, panic just for debug, and panic for internal error
       default: PANIC("Internal: Unknown asm parser state: %d.", state);
     }
 
@@ -820,6 +883,8 @@ void parse_asm_and_generate_binary(file *const f, file *const b, Tokens *const t
   PANIC_IF(token != tokens->tokens_used, "Did not end evenly when parsing tokens.");
 
   NOTE("Finished parsing %s.", f->path);
+
+  label_addresses_display(&addresses, f);
 
   for (u32 label = 0; label < num_late_labels; label++) {
     const u32 late_address = label_addresses_get(&addresses, f, tokens->tokens[late_labels[label].token_index]);
@@ -864,11 +929,13 @@ i32 main(i32 num_args, char **args) {
 
     tokenize(&assembly, &tokens);
 
+    tokens_display(&assembly, &tokens);
+
     file_change_path(&binary, args[2]);
     parse_asm_and_generate_binary(&assembly, &binary, &tokens);
     file_write_to_disk(&binary);
-
     file_close(&binary);
+
     file_close(&assembly);
   }
 
