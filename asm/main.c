@@ -9,6 +9,7 @@ rv32i assembler.
 
 TODO:
 
+- add file locations to instructions
 - generate the binary for each implemented instruction
 - fix labels
 - generate correctly with elf format
@@ -72,12 +73,15 @@ struct Instruction_Arg {
 
 enum Instruction_Type { INST_TYPE_INSTRUCTION, INST_TYPE_LABEL };
 
+// TODO: add file location (copy from instruction token)
 struct Instruction {
   enum Instruction_Type type;
   enum Instruction_Name name;
   u32 args_used;
   struct Instruction_Arg args[MAX_NUM_ARGS_PER_INSTRUCTION];
 };
+
+typedef struct Instruction Instruction;
 
 #define INST(_name, num_args, type0, type1, type2, type3)                              \
   (struct Instruction) {                                                               \
@@ -87,7 +91,7 @@ struct Instruction {
     .args = { {.type = type0 }, {.type = type1 }, {.type = type2 }, {.type = type3 } } \
   }
 
-static const struct Instruction available_instructions[NUM_INSTRUCTIONS] = {
+static const Instruction available_instructions[NUM_INSTRUCTIONS] = {
   INST(INST_ADDI, 3, ARG_REGISTER, ARG_REGISTER, ARG_INTEGER_LITERAL, 0),
   INST(INST_LW, 3, ARG_REGISTER, ARG_INTEGER_LITERAL, ARG_REGISTER, 0),
   INST(INST_BEQ, 3, ARG_REGISTER, ARG_REGISTER, ARG_LABEL, 0),
@@ -98,6 +102,17 @@ static const struct Instruction available_instructions[NUM_INSTRUCTIONS] = {
   INST(INST_AUIPC, 2, ARG_REGISTER, ARG_INTEGER_LITERAL, 0, 0),
   INST(INST_ECALL, 0, 0, 0, 0, 0),
 };
+
+
+void panic_if_bad_instruction(Instruction good, Instruction bad) {
+  // TODO: when panic, also write out file location.
+  PANIC_IF(good.args_used != bad.args_used,
+           "Expected %d args used, but got %d", good.args_used, bad.args_used);
+  for (u32 i = 0; i < good.args_used; i++) {
+    PANIC_IF(good.args[i].type != bad.args[i].type, "Expected arg type %d, but got %d", good.args[i].type, bad.args[i].type);
+  }
+}
+
 
 static const char *integer_registers[32] = {
   "zero",
@@ -151,7 +166,7 @@ i8 match_register(i8 *str, u32 length) {
   return -1;
 }
 
-i8 match_inst(i8 *str, u32 length) {
+i8 match_inst_name(i8 *str, u32 length) {
   PANIC_IF(STATIC_ARRAY_LENGTH(instruction_strings) > 255, "Too many instructions.");
 
   for (i8 i = 0; i < STATIC_ARRAY_LENGTH(instruction_strings); i++) {
@@ -192,7 +207,7 @@ union Token_Info {
   u32 instruction_index;
 };
 
-void instruction_append_arg(struct Instruction *inst, enum Arg_Type type, u32 data) {
+void instruction_append_arg(Instruction *inst, enum Arg_Type type, u32 data) {
   CALL;
   PANIC_IF(sizeof(data) != sizeof(union Arg_Info),
            "Internal: data does not match size of Arg_Info.");
@@ -207,7 +222,7 @@ void instruction_append_arg(struct Instruction *inst, enum Arg_Type type, u32 da
   RETURN;
 }
 
-void match_instruction_and_write(struct Instruction *instruction, file *b) {
+void match_instruction_and_write(Instruction *instruction, file *b) {
   CALL;
 
   PANIC_IF(instruction->type != INST_TYPE_INSTRUCTION &&
@@ -232,7 +247,12 @@ void match_instruction_and_write(struct Instruction *instruction, file *b) {
 
   u32 binary = 0;
 
+  panic_if_bad_instruction(available_instructions[instruction->type], *instruction);
+
   switch (instruction->name) {
+    // - I [31 imm 20] [19 rs1 15] [14 funct3 12] [11 rd 7] [6 op 0]
+    case INST_ADDI: {
+    } break;
     default: PANIC("Unimplemented instruction id: %d", instruction->name);
   }
 
@@ -388,7 +408,7 @@ Token tokenize_inst_or_reg_or_label(file *f, u32 byte_index) {
   if (length <= MAX_REGISTER_LEN && (register_index = match_register(f->data + start_index, length)) != -1) {
     t.info.register_index = register_index;
     t.type = TT_REGISTER;
-  } else if (length <= MAX_INSTRUCTION_LEN && (inst_index = match_inst(f->data + start_index, length)) != -1) {
+  } else if (length <= MAX_INSTRUCTION_LEN && (inst_index = match_inst_name(f->data + start_index, length)) != -1) {
     PANIC_IF(((u8)inst_index) >= NUM_INSTRUCTIONS,
              "%d matches as an instruction, but there are only %d instructions",
              inst_index, NUM_INSTRUCTIONS);
@@ -544,14 +564,6 @@ void tokenize(file *f, Tokens *tokens) {
   RETURN;
 }
 
-/*
-
-TODO:
-- finish match_instruction_and_write
-- finish fix_label_address
-
-*/
-
 struct Label_Address {
   u32 byte_index;
   u32 label_length;
@@ -668,7 +680,7 @@ void parse_asm_and_generate_binary(file *const f, file *const b, Tokens *const t
   } state = PARSE_STATEMENT;
 
   u32 instruction_counter = 0;
-  struct Instruction instruction = { 0 };
+  Instruction instruction = { 0 };
 
   const u32 label_mem_size = MAX_NUM_LABELS * sizeof(struct Label_Address);
   u8 label_memory[label_mem_size];
