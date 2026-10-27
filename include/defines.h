@@ -8,7 +8,7 @@
 #define MB KB KB
 #define GB MB KB
 
-#define MAX_FILE_NUM_BYTES 1 KB
+#define MAX_FILE_NUM_BYTES 2 KB
 #define END_OF_FILE_CHAR -1
 #define COLUMN_LIMIT 255
 #define LINE_LIMIT 255

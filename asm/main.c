@@ -9,10 +9,9 @@ rv32i assembler.
 
 TODO:
 
-- need a nice way to generate a table of instructions
-- need functions for writing r,i,s,u,b,j instructions (including exceptions)
-- implement one of every type
-- generate the binary
+- impl 1 instruction of every type (risubj), including exceptions
+- generate the binary for each implemented instruction
+- generate correctly with elf format
 - testing to catch parsing errors, binary errors + compare with gas.
 - Add rest of rv32i (and pseudoinstructions), look at baremetal
 - benchmarks?
@@ -35,19 +34,19 @@ Possible errors to check:
 // TODO: perfect hash function generator. These should be generated.
 // https://www.corsix.org/content/using-a-lookup-table-to-correct-an-approximation
 
-#define MAX_INSTRUCTION_LEN 4
-#define NUM_INSTRUCTIONS 3
+#define MAX_INSTRUCTION_LEN 5
+#define NUM_INSTRUCTIONS 9
 #define MAX_REGISTER_LEN 4
 #define MAX_NUM_LABELS 10
 #define MAX_NUM_LATE_LABELS 32
 #define MAX_NUM_ARGS_PER_INSTRUCTION 4
 // NOTE: Maintain order between Instruction_Name and instruction_strings and available_instructions
-static const char *instruction_strings[] = {
-  "addi", "lw", "beq"
+static const char *instruction_strings[NUM_INSTRUCTIONS] = {
+  "addi", "lw", "beq", "sra", "slli", "sh", "jal", "auipc", "ecall"
 };
 
 enum Instruction_Name {
-  INST_ADDI, INST_LW, INST_BEQ
+  INST_ADDI, INST_LW, INST_BEQ, INST_SRA, INST_SLLI, INST_SH, INST_JAL, INST_AUIPC, INST_ECALL
 };
 
 enum Arg_Type {
@@ -92,6 +91,12 @@ static const struct Instruction available_instructions[NUM_INSTRUCTIONS] = {
   INST(INST_ADDI, 3, ARG_REGISTER, ARG_REGISTER, ARG_INTEGER_LITERAL, 0),
   INST(INST_LW, 3, ARG_REGISTER, ARG_INTEGER_LITERAL, ARG_REGISTER, 0),
   INST(INST_BEQ, 3, ARG_REGISTER, ARG_REGISTER, ARG_LABEL, 0),
+  INST(INST_SRA, 3, ARG_REGISTER, ARG_REGISTER, ARG_REGISTER, 0),
+  INST(INST_SLLI, 3, ARG_REGISTER, ARG_REGISTER, ARG_INTEGER_LITERAL, 0),
+  INST(INST_SH, 3, ARG_REGISTER, ARG_INTEGER_LITERAL, ARG_REGISTER, 0),
+  INST(INST_JAL, 2, ARG_REGISTER, ARG_LABEL, 0, 0),
+  INST(INST_AUIPC, 2, ARG_REGISTER, ARG_INTEGER_LITERAL, 0, 0),
+  INST(INST_ECALL, 0, 0, 0, 0, 0),
 };
 
 static const char *integer_registers[32] = {
@@ -214,8 +219,6 @@ void match_instruction_and_write(struct Instruction *instruction, file *b) {
     RETURN;
   }
 
-  // TODO: just display the arg for now nicely, to help debugging.
-  // impl addi, add, lw, sw, beq, jalr before actually writing instructions.
   if (instruction->type == INST_TYPE_INSTRUCTION) {
 
     printf("%s ", instruction_strings[instruction->name]);
@@ -329,8 +332,6 @@ Token tokenize_number(file *f, u32 byte_index) {
     PANIC_IF(next_byte != 'x' && is_number(next_byte),
              "Can't start an integer literal with a 0.");
 
-    // TODO: shouldn't allow 0x
-
     byte_index += 2;
     while (is_hexadecimal(byte = file_read_byte(f, byte_index))) {
       number = number * 16 + ascii_hex_to_i32(byte);
@@ -356,7 +357,7 @@ Token tokenize_number(file *f, u32 byte_index) {
 
   }
   t.info.integer_literal = number * sign; // probably theres a cool trick for this. would also be cool if compiler could figure it out.
-  t.bytes_used = byte_index - start_index; // TODO: check this.
+  t.bytes_used = byte_index - start_index;
 
   RETURN_VAL(t);
 }
@@ -701,7 +702,6 @@ void parse_asm_and_generate_binary(file *const f, file *const b, Tokens *const t
         } else if (current.type == TT_INSTRUCTION){
           state = PARSE_INSTRUCTION;
         } else {
-          // TODO: replace %d with %s and token type -> const char *
           PANIC("Expected instruction or label, found token type %d.", current.type);
         }
       } break;
@@ -744,17 +744,21 @@ void parse_asm_and_generate_binary(file *const f, file *const b, Tokens *const t
       case PARSE_ARGUMENT: {
         PANIC_IF(current.type != TT_REGISTER &&
                  current.type != TT_LABEL &&
-                 current.type != TT_INTEGER_LITERAL,
-                 "Expected register or immediate when parsing argument, got token type %d.", current.type);
+                 current.type != TT_INTEGER_LITERAL &&
+                 !skippable_token(current.type),
+                 "Expected register or immediate when parsing argument or ; or \\n, got token type %d.", current.type);
 
         PANIC_IF(last_token, "Bad ending when parsing statement");
 
         if (current.type == TT_LABEL || current.type == TT_INTEGER_LITERAL) {
           state = PARSE_IMMEDIATE;
           break;
+        } else if (current.type == TT_REGISTER) {
+          instruction_append_arg(&instruction, ARG_REGISTER, current.info.register_index);
+        } else {
+          state = PARSE_END_STATEMENT;
+          break;
         }
-
-        instruction_append_arg(&instruction, ARG_REGISTER, current.info.register_index);
 
         if (next.type == TT_SEMICOLON || next.type == TT_NEWLINE) {
           state = PARSE_END_STATEMENT;
@@ -872,7 +876,6 @@ void parse_asm_and_generate_binary(file *const f, file *const b, Tokens *const t
         instruction = (struct Instruction) { 0 };
         state = PARSE_STATEMENT;
       } break;
-
       // TODO: have a panic for release, panic just for debug, and panic for internal error
       default: PANIC("Internal: Unknown asm parser state: %d.", state);
     }
@@ -922,7 +925,6 @@ i32 main(i32 num_args, char **args) {
     file_read_into_memory(&assembly);
 
     if (file_failed(&assembly)) {
-      printf(RED("Error") ": could not read %s.", assembly.path);
       file_close(&assembly);
       continue;
     }

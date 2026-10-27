@@ -6,33 +6,34 @@
 _label0:addi x1, ra, 0x00;
         lw x2, 0x40(sp)
         addi x3, gp, 5;
-        addi x4, tp, 6
+        sra x4, tp, tp
         addi x5, t0, 7;
 # 7
 l_abel1:
         addi x6, t1, 8;
         beq x7, t2, label3_ # 8
         addi x8, s0, -1;
-        addi x8, fp, -1;
+        sra x8, fp, s0;
         addi x9, s1, -2
-        addi x10, a0, -3;
-        addi x11, a1, -4 # this is another comment
-        addi x12, a2, -5
-        addi x13, a3, -6;
+        sh x10, -3(a0);
+        slli x11, a1, -4 # this is another comment
+        auipc a2, -5
+        slli x13, a3, -6;
         addi x14, a4, 0x7fF;
+        ecall
   # another comment
         beq x15, a5, l_abel1; # 17
         addi x16, a6, -9
         addi x17, a7, -10;addi x18, s2, -11
         addi x19, s3, 10 # this is some comment
-        addi x20, s4, 2047
+        slli x20, s4, 2047
         addi x21, s5, -2048; addi x22, s6, -100
 # 25
 label3_: # last comment
         addi x23, s7, -10;
         beq x24, s8, label4 # 26
-        addi x25, s9, 1;
-        addi x26, s10, 2;
+        jal x25, label4;
+        sra x26, s10, s10;
 # 29
 label4:  addi x27, s11, 3 ;addi x28, t3, 4;
         addi x29, t4, 4

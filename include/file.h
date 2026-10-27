@@ -54,7 +54,7 @@ static inline void file_read_into_memory(file *f) {
   error e;
   error_set(&f->err, NO_ERROR_YET, NULL);
 
-  os_file_open(f->path, O_RDONLY, &file_descriptor, &f->bytes_used, &e);
+  os_file_open(f->path, O_RDONLY, &file_descriptor, &f->bytes_used, f->bytes_reserved, &e);
 
   if (e.type == FAILED) {
     f->err = e;
@@ -122,7 +122,7 @@ static inline void file_write_to_disk(file *f) {
   error e = { .type = SUCCESS, .message = NULL };
   i32 file_descriptor;
 
-  os_file_open(f->path, O_RDWR | O_CREAT, &file_descriptor, NULL, &e);
+  os_file_open(f->path, O_RDWR | O_CREAT, &file_descriptor, NULL, 0xffffffff, &e);
   if (e.type == FAILED) {
     f->err = e;
     goto _file_write_to_disk_return;

@@ -11,6 +11,7 @@ static inline void linux_file_open(const char *file_path,
                                    u32 flags,
                                    i32 *file_descriptor,
                                    u32 *num_bytes,
+                                   const u32 max_num_bytes,
                                    error *e) {
 
   *file_descriptor = open(file_path, flags, !!(flags & O_CREAT) * 0644);
@@ -25,7 +26,7 @@ static inline void linux_file_open(const char *file_path,
     return;
   }
 
-  if (st.st_size > MAX_FILE_NUM_BYTES) {
+  if (st.st_size > max_num_bytes) {
     error_set(e, FAILED, "File to big.");
     return;
   }
