@@ -16,17 +16,19 @@ l_abel1:
         sra x8, fp, s0;
         addi x9, s1, -2
         sh x10, -3(a0);
-        slli x11, a1, -4 # this is another comment
+        slli x11, a1, 4 # this is another comment
         auipc a2, -5
-        slli x13, a3, -6;
+        slli x13, a3, 31;
         addi x14, a4, 0x7fF;
-        ecall
+
+
+
   # another comment
         beq x15, a5, l_abel1; # 17
         addi x16, a6, -9
         addi x17, a7, -10;addi x18, s2, -11
         addi x19, s3, 10 # this is some comment
-        slli x20, s4, 2047
+        slli x20, s4, 1
         addi x21, s5, -2048; addi x22, s6, -100
 # 25
 label3_: # last comment

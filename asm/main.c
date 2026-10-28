@@ -9,7 +9,6 @@ rv32i assembler.
 
 TODO:
 
-- add file locations to instructions
 - generate the binary for each implemented instruction
 - fix labels
 - generate correctly with elf format
@@ -36,18 +35,18 @@ Possible errors to check:
 // https://www.corsix.org/content/using-a-lookup-table-to-correct-an-approximation
 
 #define MAX_INSTRUCTION_LEN 5
-#define NUM_INSTRUCTIONS 9
+#define NUM_INSTRUCTIONS 8
 #define MAX_REGISTER_LEN 4
 #define MAX_NUM_LABELS 10
 #define MAX_NUM_LATE_LABELS 32
 #define MAX_NUM_ARGS_PER_INSTRUCTION 3
 // NOTE: Maintain order between Instruction_Name and instruction_strings and available_instructions
 static const char *instruction_strings[NUM_INSTRUCTIONS] = {
-  "addi", "lw", "beq", "sra", "slli", "sh", "jal", "auipc", "ecall"
+  "addi", "lw", "beq", "sra", "slli", "sh", "jal", "auipc"
 };
 
 enum Instruction_Name {
-  INST_ADDI, INST_LW, INST_BEQ, INST_SRA, INST_SLLI, INST_SH, INST_JAL, INST_AUIPC, INST_ECALL
+  INST_ADDI, INST_LW, INST_BEQ, INST_SRA, INST_SLLI, INST_SH, INST_JAL, INST_AUIPC
 };
 
 enum Arg_Type {
@@ -59,7 +58,7 @@ enum Arg_Type {
 };
 
 union Arg_Info {
-  i32 offset;
+  // i32 offset;
   u32 register_index;
   i32 integer_literal;
   u32 label_index;
@@ -102,7 +101,6 @@ static const Instruction available_instructions[NUM_INSTRUCTIONS] = {
   INST(INST_SH, 3, ARG_REGISTER, ARG_INTEGER_LITERAL, ARG_REGISTER),
   INST(INST_JAL, 2, ARG_REGISTER, ARG_LABEL, 0),
   INST(INST_AUIPC, 2, ARG_REGISTER, ARG_INTEGER_LITERAL, 0),
-  INST(INST_ECALL, 0, 0, 0, 0),
 };
 
 
@@ -225,12 +223,95 @@ void instruction_append_arg(Instruction *inst, enum Arg_Type type, u32 data) {
   RETURN;
 }
 
-void match_instruction_and_write(Instruction *instruction, file *b) {
-  CALL;
+// I [31 imm 20] [19 rs1 15] [14 funct3 12] [11 rd  7] [6 op 0]
+u32 write_imm_instruction(Instruction *inst) {
+  // TODO: panics: register, imm,
+  // TODO: switch table for funct3
+  u32 imm = inst->args[2].info.integer_literal << 20;
+  u32 rs1 = inst->args[1].info.register_index << 15;
+  u32 funct3 = 0;
+  u32 rd  = inst->args[0].info.register_index << 7;
+  u32 op = 0b0010011;
+  return imm | rs1 | funct3 | rd | op;
+}
 
-  PANIC_IF(instruction->type != INST_TYPE_INSTRUCTION &&
-           instruction->type != INST_TYPE_LABEL, "Expected label or instruction.");
+// I [31 imm 20] [19 rs1 15] [14 funct3 12] [11 rd  7] [6 op 0]
+u32 write_load_instruction(Instruction *inst) {
+  u32 imm = inst->args[1].info.integer_literal << 20;
+  u32 rs1 = inst->args[2].info.register_index << 15;
+  u32 funct3 = 0x2 << 12; // TODO: switch
+  u32 rd  = inst->args[0].info.register_index << 7;
+  u32 op = 0b0000011;
+  return imm | rs1 | funct3 | rd | op;
+}
 
+// - B [31 imm12 31] [30 imm10-5 25] [24 rs2 20] [19 rs1 15] [14 funct3 12] [11 imm4-1 8] [7 imm11 7][ 6 op 0]
+u32 write_branch_instruction(Instruction *inst) {
+  u32 imm12 = (inst->args[2].info.integer_literal < 0) << 31;
+  u32 imm10_5 = (inst->args[2].info.integer_literal & 0x1f0) << 20;
+  u32 rs2  = inst->args[1].info.register_index << 20;
+  u32 rs1 = inst->args[0].info.register_index << 15;
+  u32 funct3 = 0; // TODO: switch
+  u32 imm4_1 = (inst->args[2].info.integer_literal & 0x1e) << 8;
+  u32 imm11 = (inst->args[2].info.integer_literal & 0xbfffffff) >> 23;
+  u32 op = 0b1100011;
+  return imm12 | imm10_5 | rs2 | rs1 | funct3 | imm4_1 | imm11 | op;
+}
+
+// - R [31 funct7 25] [24 rs2 20] [19 rs1 15] [14 funct3 12] [11 rd  7] [6 op 0]
+u32 write_register_instruction(Instruction *inst) {
+  u32 funct7 = (0x20 << 25); // TODO: switch
+  u32 rs2 = (inst->args[2].info.register_index) << 20;
+  u32 rs1 = (inst->args[1].info.register_index) << 15;
+  u32 funct3 = 0x5 << 12; // TODO: switch
+  u32 rd = (inst->args[0].info.register_index) << 7;
+  u32 op = 0b0110011;
+  return funct7 | rs2 | rs1 | funct3 | rd | op;
+}
+
+u32 write_shift_imm_instruction(Instruction *inst) {
+  u32 funct7 = 0; // TODO: switch
+  u32 shamt = (inst->args[2].info.integer_literal & 31) << 20;
+  u32 rs1 = (inst->args[1].info.register_index) << 15;
+  u32 funct3 = 1 << 12; // TODO: switch
+  u32 rd = (inst->args[0].info.register_index) << 7;
+  u32 op = 0b0010011;
+  return funct7 | shamt | rs1 | funct3 | rd | op;
+}
+
+
+// - S [31 imm 25] [24 rs2 20] [19 rs1 15] [14 funct3 12] [11 imm 7] [6 op 0]
+u32 write_store_instruction(Instruction *inst) {
+  u32 imm12_6 = (inst->args[1].info.integer_literal & 0xfe0) << 20;
+  u32 rs2 = inst->args[0].info.register_index << 20;
+  u32 rs1 = inst->args[2].info.register_index << 15;
+  u32 funct3 = 1 << 12; // TODO: switch
+  u32 imm5_0 = (inst->args[1].info.integer_literal & 0x1f) << 7;
+  u32 op = 0b0100011;
+  return imm12_6 | rs2 | rs1 | funct3 | imm5_0 | op;
+}
+
+// - J [31 imm20 31] [30 imm10-1 21] [20 imm11 20] [19 imm19-12 12] [11 rd 7] [6 op 0]
+u32 write_jump_instruction(Instruction *inst) {
+  i32 imm = inst->args[1].info.integer_literal;
+  u32 imm20 = (imm < 0) << 31;
+  u32 imm10_1 = (imm & 0x3ff) << 21;
+  u32 imm_11 = (imm & 0x400) << 20; // wrong
+  u32 imm19_12 = (imm & 0x3f800);
+  u32 rd = inst->args[0].info.register_index << 7;
+  u32 op = 0b1101111;
+  return imm20 | imm10_1 | imm_11 | imm19_12 | rd | op;
+}
+
+// - U [31 imm 12] [11 rd  7] [6 op 0]
+u32 write_upper_instruction(Instruction *inst) {
+  u32 imm = inst->args[1].info.integer_literal << 12;
+  u32 rd = inst->args[0].info.register_index << 7;
+  u32 op = 0b0010111;
+  return imm | rd | op;
+}
+
+void instruction_display(Instruction *instruction) {
   if (instruction->type == INST_TYPE_LABEL) {
     printf("label");
     RETURN;
@@ -246,19 +327,56 @@ void match_instruction_and_write(Instruction *instruction, file *b) {
     }
     printf(", ");
   }
-  printf("\n");
+}
+
+void match_instruction_and_write(Instruction *instruction, file *b) {
+  CALL;
+
+  PANIC_IF(instruction->type != INST_TYPE_INSTRUCTION &&
+           instruction->type != INST_TYPE_LABEL, "Expected label or instruction.");
 
   u32 binary = 0;
 
-  NOTE("Checking %d", instruction->type);
   panic_if_bad_instruction(available_instructions[instruction->name], *instruction);
 
   switch (instruction->name) {
-    // - I [31 imm 20] [19 rs1 15] [14 funct3 12] [11 rd 7] [6 op 0]
     case INST_ADDI: {
+      binary = write_imm_instruction(instruction);
     } break;
+
+    case INST_LW: {
+      binary = write_load_instruction(instruction);
+    } break;
+
+    case INST_BEQ: {
+      binary = write_branch_instruction(instruction);
+    } break;
+
+    case INST_SRA: {
+      binary = write_register_instruction(instruction);
+    } break;
+
+    case INST_SLLI: {
+      binary = write_shift_imm_instruction(instruction);
+    } break;
+
+    case INST_SH: {
+      binary = write_store_instruction(instruction);
+    } break;
+
+    case INST_JAL: {
+      binary = write_jump_instruction(instruction);
+    } break;
+
+    case INST_AUIPC: {
+      binary = write_upper_instruction(instruction);
+    } break;
+
     default: PANIC("Unimplemented instruction id: %d", instruction->name);
   }
+
+  instruction_display(instruction);
+  printf("Binary: %08x\n", binary);
 
   file_append_bytes(b, (i8 *)(&binary), sizeof(binary));
   RETURN;
@@ -944,7 +1062,7 @@ i32 main(i32 num_args, char **args) {
 
     tokenize(&assembly, &tokens);
 
-    tokens_display(&assembly, &tokens);
+    // tokens_display(&assembly, &tokens);
 
     file_change_path(&binary, args[2]);
     parse_asm_and_generate_binary(&assembly, &binary, &tokens);
