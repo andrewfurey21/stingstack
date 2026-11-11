@@ -49,6 +49,7 @@ static inline void file_change_path(file *f, const char *path) {
   error_set(&f->err, NO_ERROR_YET, NULL);
 }
 
+// TODO: don't copy. just unmap when closing.
 static inline void file_read_into_memory(file *f) {
   i32 file_descriptor;
   error e;

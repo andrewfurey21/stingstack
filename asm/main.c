@@ -68,7 +68,6 @@ enum Arg_Type {
 };
 
 union Arg_Info {
-  // i32 offset;
   u32 register_index;
   i32 integer_literal;
   u32 label_index;
@@ -115,6 +114,7 @@ static const Instruction available_instructions[NUM_INSTRUCTIONS] = {
 
 
 void panic_if_bad_instruction(Instruction good, Instruction bad) {
+  CALL;
   PANIC_IF(good.args_used != bad.args_used,
            "Expected %d args used, but got %d on line %d, %d",
            good.args_used, bad.args_used, bad.location.line, bad.location.column);
@@ -122,6 +122,7 @@ void panic_if_bad_instruction(Instruction good, Instruction bad) {
     PANIC_IF(good.args[i].type != bad.args[i].type, "Expected arg %d type %d, but got %d on line %d:%d.",
              i, good.args[i].type, bad.args[i].type, bad.location.line, bad.location.column);
   }
+  RETURN;
 }
 
 
@@ -255,11 +256,11 @@ u32 write_load_instruction(Instruction *inst) {
   return imm | rs1 | funct3 | rd | op;
 }
 
-u32 branch_imm(u32 imm) {
-  u32 imm12 = (imm < 0) << 31;
-  u32 imm10_5 = (imm & 0x1f0) << 20;
-  u32 imm4_1 = (imm & 0x1e) << 8;
-  u32 imm11 = (imm & 0xbfffffff) >> 23;
+u32 branch_imm(i32 imm) {
+  u32 imm12 = imm & 0x80000000; // sign bit
+  u32 imm10_5 = (imm & 0x7e0) << 20;
+  u32 imm4_1 = (imm & 0x1e) << 7;
+  u32 imm11 = (imm & 0x800) >> 4; // will this signed right shift?
   return imm12 | imm10_5 | imm4_1 | imm11;
 }
 
@@ -306,11 +307,12 @@ u32 write_store_instruction(Instruction *inst) {
 }
 
 // - J [31 imm20 31] [30 imm10-1 21] [20 imm11 20] [19 imm19-12 12] [11 rd 7] [6 op 0]
-u32 jump_imm(u32 imm) {
-  u32 imm20 = (imm < 0) << 31;
-  u32 imm10_1 = (imm & 0x3ff) << 21;
-  u32 imm_11 = (imm & 0x400) << 20; // wrong
-  u32 imm19_12 = (imm & 0x3f800);
+u32 jump_imm(i32 imm) {
+  // Cut off last bit, since not used.
+  u32 imm20 = imm & 0x80000000;
+  u32 imm10_1 = (imm & 0x7fe) << 20;
+  u32 imm_11 = (imm & 0x800) << 9;
+  u32 imm19_12 = (imm & 0x0ff000);
   return imm20 | imm10_1 | imm_11 | imm19_12;
 }
 
@@ -345,6 +347,7 @@ void instruction_display(Instruction *instruction) {
     }
     printf(", ");
   }
+  printf("\n");
 }
 
 void match_instruction_and_write(Instruction *instruction, file *b) {
@@ -394,7 +397,7 @@ void match_instruction_and_write(Instruction *instruction, file *b) {
   }
 
   instruction_display(instruction);
-  printf("Binary: %08x\n", binary);
+  // printf("Binary: %08x\n", binary);
 
   file_append_bytes(b, (i8 *)(&binary), sizeof(binary));
   RETURN;
@@ -704,7 +707,6 @@ struct Label_Address {
   u32 byte_index;
   u32 label_length;
   u32 address;
-  enum Late_Label_Type { LLT_BRANCH, LLT_JUMP } type;
   b8 occupied;
 };
 
@@ -725,7 +727,7 @@ Label_Addresses label_addresses_setup(u8 *bytes, u32 num_bytes) {
   };
 }
 
-void label_address_insert(Label_Addresses *addresses, file *f, Token token, u32 address, enum Late_Label_Type type) {
+void label_address_insert(Label_Addresses *addresses, file *f, Token token, u32 address) {
   CALL;
 
   PANIC_IF(token.type != TT_LABEL,
@@ -755,7 +757,6 @@ void label_address_insert(Label_Addresses *addresses, file *f, Token token, u32 
       addresses->addresses[index].label_length = token.bytes_used;
       addresses->addresses[index].occupied = true;
       addresses->addresses[index].address = address;
-      addresses->addresses[index].type = type;
       addresses->used++;
       RETURN;
     }
@@ -792,24 +793,23 @@ struct Label_Address label_addresses_get(Label_Addresses *addresses, file *f, To
   return (struct Label_Address) { 0 };
 }
 
-void fix_label_address(file *b, u32 instruction_index, u32 label_address, enum Late_Label_Type type) {
+void fix_label_address(file *b, u32 instruction_index, i32 label_address) {
   CALL;
   PANIC_IF(instruction_index * 4 >= b->bytes_used, "Instruction out of bounds");
-  NOTE("Fixing instrution %d label %d.", instruction_index, label_address);
 
   u32 *instructions = (u32 *)b->data;
+  u32 instruction = instructions[instruction_index];
 
-  PANIC_IF(type != LLT_BRANCH && type != LLT_JUMP, "Expected branch or jump.");
+  b8 is_branch = ((instruction & 0x7f) ^ 0b1100011) == 0;
 
-  if (type == LLT_JUMP) {
-    instructions[instruction_index] |= jump_imm(label_address);
-  } else {
+  if (is_branch) {
     instructions[instruction_index] |= branch_imm(label_address);
+  } else {
+    instructions[instruction_index] |= jump_imm(label_address);
   }
 
   RETURN;
 }
-
 
 void label_addresses_display(Label_Addresses *addresses, file *f) {
   for (u32 i = 0; i < addresses->allocated; i++) {
@@ -882,9 +882,8 @@ void parse_asm_and_generate_binary(file *const f, file *const b, Tokens *const t
                  next.bytes_used, &f->data[next.byte_index],
                  current.location.line, current.location.column);
 
-        PANIC_IF(!is_branch_instruction(instruction.name) && !is_jump_instruction(instruction.name), "Expected branch or jump instruction");
-        enum Late_Label_Type type = instruction.name == INST_BEQ ? LLT_BRANCH : LLT_JUMP;
-        label_address_insert(&addresses, f, current, instruction_counter, type);
+        label_address_insert(&addresses, f, current, instruction_counter);
+
         tokens_consumed = 2;
         instruction.type = INST_TYPE_LABEL;
 
@@ -1059,7 +1058,7 @@ void parse_asm_and_generate_binary(file *const f, file *const b, Tokens *const t
 
   for (u32 label = 0; label < num_late_labels; label++) {
     struct Label_Address late_address = label_addresses_get(&addresses, f, tokens->tokens[late_labels[label].token_index]);
-    fix_label_address(b, late_labels[label].instruction, late_address.address, late_address.type);
+    fix_label_address(b, late_labels[label].instruction, late_address.address * 4);
   }
 
   RETURN;
@@ -1099,7 +1098,7 @@ i32 main(i32 num_args, char **args) {
 
     tokenize(&assembly, &tokens);
 
-    // tokens_display(&assembly, &tokens);
+    tokens_display(&assembly, &tokens);
 
     file_change_path(&binary, args[2]);
     parse_asm_and_generate_binary(&assembly, &binary, &tokens);
