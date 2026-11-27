@@ -9,13 +9,15 @@ rv32i assembler.
 
 TODO:
 
-- check binary for branches and jumps
-- generate correctly with elf format
+- generate correctly with elf format, run basic blocks
+- make sure addresses are pc-relative, try running jumpy code
 - testing to catch parsing errors, binary errors + compare with gas.
 - clean up. refactor. look at baremetal.
 - Add rest of rv32i
 - Add pseudoinstructions
-- more cleanup, refactor, benchmarks.
+- attributes: section
+- more cleanup, refactors.
+- write blog post
 
 */
 
@@ -32,15 +34,13 @@ Possible errors to check:
 
 #include "../include/sting.h"
 
-// TODO: perfect hash function generator. These should be generated.
-// https://www.corsix.org/content/using-a-lookup-table-to-correct-an-approximation
-
 #define MAX_INSTRUCTION_LEN 5
 #define NUM_INSTRUCTIONS 8
 #define MAX_REGISTER_LEN 4
 #define MAX_NUM_LABELS 10
 #define MAX_NUM_LATE_LABELS 32
 #define MAX_NUM_ARGS_PER_INSTRUCTION 3
+
 // NOTE: Maintain order between Instruction_Name and instruction_strings and available_instructions
 static const char *instruction_strings[NUM_INSTRUCTIONS] = {
   "addi", "lw", "beq", "sra", "slli", "sh", "jal", "auipc"
@@ -101,15 +101,7 @@ typedef struct Instruction Instruction;
   }
 
 static const Instruction available_instructions[NUM_INSTRUCTIONS] = {
-  INST(INST_ADDI, 3, ARG_REGISTER, ARG_REGISTER, ARG_INTEGER_LITERAL),
-  INST(INST_LW, 3, ARG_REGISTER, ARG_INTEGER_LITERAL, ARG_REGISTER),
-
-  INST(INST_BEQ, 3, ARG_REGISTER, ARG_REGISTER, ARG_LABEL),
-  INST(INST_SRA, 3, ARG_REGISTER, ARG_REGISTER, ARG_REGISTER),
-  INST(INST_SLLI, 3, ARG_REGISTER, ARG_REGISTER, ARG_INTEGER_LITERAL),
-  INST(INST_SH, 3, ARG_REGISTER, ARG_INTEGER_LITERAL, ARG_REGISTER),
-  INST(INST_JAL, 2, ARG_REGISTER, ARG_LABEL, 0),
-  INST(INST_AUIPC, 2, ARG_REGISTER, ARG_INTEGER_LITERAL, 0),
+  #include "instructions.inc"
 };
 
 
@@ -397,7 +389,6 @@ void match_instruction_and_write(Instruction *instruction, file *b) {
   }
 
   instruction_display(instruction);
-  // printf("Binary: %08x\n", binary);
 
   file_append_bytes(b, (i8 *)(&binary), sizeof(binary));
   RETURN;
@@ -654,6 +645,7 @@ void tokenize(file *f, Tokens *tokens) {
         .type = byte == '(' ? TT_LEFT_BRACE : TT_RIGHT_BRACE,
       };
       token_length = tokens_append(f, tokens, newline);
+      // token_length = tokens_append(f, tokens, (Token){.byte_index = byte_index, .bytes_used = 1, .type = '('});
 
     } else if (is_non_newline_whitespace(byte)) {
       token_length =
@@ -852,8 +844,6 @@ void parse_asm_and_generate_binary(file *const f, file *const b, Tokens *const t
   while (skippable_token(tokens_get(tokens, token).type)) token++;
 
   while(token < tokens->tokens_used) {
-    // NOTE(YELLOW("Parse state:")" Token index: %d, parse state: %d", token, state);
-
     tokens_consumed = 0;
 
     Token current = tokens_get(tokens, token);
@@ -1082,7 +1072,8 @@ i32 main(i32 num_args, char **args) {
   Arena arena = arena_setup(memory, memory_size);
 
   file assembly = file_setup(arena_alloc(&arena, file_size, 1), file_size, NULL);
-  file binary = file_setup(arena_alloc(&arena, binary_size, 4), binary_size, NULL);
+  // Alignment can be 1, since we cast to (i8 *) when writing a u32.
+  file binary = file_setup(arena_alloc(&arena, binary_size, 1), binary_size, NULL);
 
   Tokens tokens = tokens_setup(arena_alloc(&arena, tokens_size, 1), tokens_size);
 
